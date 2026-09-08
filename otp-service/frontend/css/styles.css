@@ -1,0 +1,501 @@
+/* ==========================================================
+   Gmail OTP Auth Module — styles
+   Design concept: a "keypad panel" — a light studio surface holding a
+   clean white card. A thin progress rail across the top of the card
+   doubles as a step indicator (email -> code -> verified), so the one
+   decorative flourish in the design also carries real information.
+   ========================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --otp-ink: #0f172a;
+  --otp-ink-soft: #eef2f7;
+  --otp-paper: #ffffff;
+  --otp-paper-muted: #f8fafc;
+  --otp-text-on-dark: #f1f5f9;
+  --otp-text-primary: #0f172a;
+  --otp-text-muted: #64748b;
+  --otp-line: #e2e8f0;
+  --otp-accent: #0f766e;
+  --otp-accent-hover: #115e59;
+  --otp-accent-soft: #ccfbf1;
+  --otp-error: #dc2626;
+  --otp-error-soft: #fee2e2;
+  --otp-radius-lg: 16px;
+  --otp-radius-md: 10px;
+  --otp-shadow: 0 24px 60px -24px rgba(15, 23, 42, 0.22);
+  --otp-font-display: 'Sora', 'Inter', -apple-system, sans-serif;
+  --otp-font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.otp-auth-root {
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #f4f7fb 0%, #e8edf4 100%);
+  font-family: var(--otp-font-body);
+  color: var(--otp-text-primary);
+  padding: 24px 16px;
+  box-sizing: border-box;
+}
+
+.otp-auth-root *,
+.otp-auth-root *::before,
+.otp-auth-root *::after {
+  box-sizing: border-box;
+}
+
+.otp-shell {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ---------- brand ---------- */
+.otp-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.otp-brand__mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--otp-accent);
+  color: #ffffff;
+  font-family: var(--otp-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.otp-brand__mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.otp-brand__name {
+  font-family: var(--otp-font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--otp-text-primary);
+  letter-spacing: -0.01em;
+}
+
+/* ---------- card ---------- */
+.otp-card {
+  width: 100%;
+  background: var(--otp-paper);
+  border-radius: var(--otp-radius-lg);
+  box-shadow: var(--otp-shadow);
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.otp-progress {
+  height: 4px;
+  width: 100%;
+  background: var(--otp-line);
+}
+
+.otp-progress__fill {
+  height: 100%;
+  width: 33.33%;
+  background: var(--otp-accent);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.otp-card__body {
+  padding: 36px 32px 32px;
+  position: relative;
+}
+
+/* ---------- views / transitions ---------- */
+.otp-view {
+  display: none;
+}
+
+.otp-view--active {
+  display: block;
+  animation: otp-fade-in 0.35s ease both;
+}
+
+@keyframes otp-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-view--active {
+    animation: none;
+  }
+}
+
+/* ---------- typography ---------- */
+.otp-heading {
+  font-family: var(--otp-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+  color: var(--otp-text-primary);
+}
+
+.otp-heading--center {
+  text-align: center;
+}
+
+.otp-subtext {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--otp-text-muted);
+  margin: 0 0 24px;
+}
+
+.otp-subtext--center {
+  text-align: center;
+}
+
+.otp-masked-email {
+  font-size: 14px;
+  color: var(--otp-text-primary);
+  font-weight: 500;
+  margin: -8px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ---------- form elements ---------- */
+.otp-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--otp-text-primary);
+  margin-bottom: 6px;
+}
+
+.otp-input-text {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: var(--otp-font-body);
+  border: 1px solid var(--otp-line);
+  border-radius: var(--otp-radius-md);
+  background: #fff;
+  color: var(--otp-text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.otp-input-text:focus {
+  outline: none;
+  border-color: var(--otp-accent);
+  box-shadow: 0 0 0 3px var(--otp-accent-soft);
+}
+
+.otp-error {
+  min-height: 18px;
+  font-size: 13px;
+  color: var(--otp-error);
+  margin: 10px 0 6px;
+}
+
+/* ---------- buttons ---------- */
+.otp-btn {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: var(--otp-radius-md);
+  font-family: var(--otp-font-body);
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s ease, transform 0.05s ease, opacity 0.15s ease;
+}
+
+.otp-btn:active {
+  transform: translateY(1px);
+}
+
+.otp-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.otp-btn--primary {
+  background: var(--otp-accent);
+  color: #ffffff;
+  margin-top: 4px;
+}
+
+.otp-btn--primary:hover:not(:disabled) {
+  background: var(--otp-accent-hover);
+}
+
+.otp-btn--secondary {
+  background: var(--otp-paper-muted);
+  color: var(--otp-text-primary);
+  border: 1px solid var(--otp-line);
+}
+
+.otp-btn--secondary:hover:not(:disabled) {
+  background: #eef1f5;
+}
+
+.otp-link {
+  background: none;
+  border: none;
+  color: var(--otp-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.otp-link:disabled {
+  color: var(--otp-text-muted);
+  cursor: not-allowed;
+}
+
+.otp-link:focus-visible,
+.otp-btn:focus-visible,
+.otp-input-text:focus-visible,
+.otp-box:focus-visible {
+  outline: 2px solid var(--otp-accent);
+  outline-offset: 2px;
+}
+
+.otp-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: otp-spin 0.7s linear infinite;
+}
+
+@keyframes otp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- OTP boxes ---------- */
+.otp-boxes {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.otp-box {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  text-align: center;
+  font-family: var(--otp-font-display);
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--otp-line);
+  border-radius: var(--otp-radius-md);
+  background: #fff;
+  color: var(--otp-text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.otp-box:focus {
+  outline: none;
+  border-color: var(--otp-accent);
+  box-shadow: 0 0 0 3px var(--otp-accent-soft);
+}
+
+.otp-box--error {
+  border-color: var(--otp-error);
+  animation: otp-shake 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-box--error {
+    animation: none;
+  }
+}
+
+@keyframes otp-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+.otp-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--otp-text-muted);
+}
+
+/* ---------- success view ---------- */
+.otp-success-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.otp-checkmark {
+  width: 64px;
+  height: 64px;
+}
+
+.otp-checkmark__circle {
+  stroke: var(--otp-accent);
+  stroke-width: 2.5;
+  stroke-dasharray: 151;
+  stroke-dashoffset: 151;
+  animation: otp-circle 0.5s ease-out forwards;
+}
+
+.otp-checkmark__check {
+  stroke: var(--otp-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 36;
+  stroke-dashoffset: 36;
+  animation: otp-check 0.3s 0.4s ease-out forwards;
+}
+
+@keyframes otp-circle {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes otp-check {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-checkmark__circle,
+  .otp-checkmark__check {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+.otp-summary {
+  background: var(--otp-paper-muted);
+  border: 1px solid var(--otp-line);
+  border-radius: var(--otp-radius-md);
+  padding: 4px 16px;
+  margin: 20px 0;
+}
+
+.otp-summary__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--otp-line);
+}
+
+.otp-summary__row:last-child {
+  border-bottom: none;
+}
+
+.otp-summary__row span {
+  color: var(--otp-text-muted);
+}
+
+.otp-summary__row strong {
+  font-weight: 600;
+  color: var(--otp-text-primary);
+}
+
+.otp-status-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--otp-accent-soft);
+  color: var(--otp-accent-hover);
+  font-size: 12px !important;
+}
+
+/* ---------- demo dashboard ---------- */
+.otp-card--dashboard .otp-card__body {
+  text-align: center;
+}
+
+.otp-dashboard-badge {
+  display: inline-block;
+  margin: 0 auto 16px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--otp-accent-soft);
+  color: var(--otp-accent-hover);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.otp-card--dashboard .otp-summary__row {
+  text-align: left;
+}
+
+.otp-card--dashboard code {
+  background: var(--otp-paper-muted);
+  border: 1px solid var(--otp-line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+
+/* ---------- footnote ---------- */
+.otp-footnote {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--otp-text-muted);
+  text-align: center;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 420px) {
+  .otp-card__body {
+    padding: 28px 20px 24px;
+  }
+
+  .otp-box {
+    font-size: 17px;
+  }
+}

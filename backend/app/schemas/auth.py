@@ -25,6 +25,11 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OtpExchangeRequest(BaseModel):
+    otp_token: str
+    email: EmailStr
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str

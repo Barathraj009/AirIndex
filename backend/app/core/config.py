@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
 
+    otp_service_jwt_secret: str = "dev-otp-jwt-secret-change-in-prod"
+
     cors_allowed_origins: str = "http://localhost:5173"
 
     api_rate_limit_per_minute: int = 120

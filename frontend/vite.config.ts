@@ -10,6 +10,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/otp-auth/': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/otp-auth/, ''),
+      },
     },
   },
 })

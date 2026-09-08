@@ -26,10 +26,14 @@ def _adapter_registry():
     # Late import so this module stays importable in offline/test contexts
     # without the root-level `ingestion` package on sys.path.
     from ingestion.adapters.demo_adapter import DemoAdapter
+    from ingestion.adapters.gds_adapter import GdsAdapter
+    from ingestion.adapters.metasearch_adapter import MetasearchAdapter
     from ingestion.adapters.base import CollectionRequest
 
     registry = dict(ADAPTER_REGISTRY)
     registry.setdefault("DEMO_GENERATOR", DemoAdapter)
+    registry.setdefault("GOOGLE_FLIGHTS_API", GdsAdapter)
+    registry.setdefault("GOOGLE_FLIGHTS", MetasearchAdapter)
     return registry, CollectionRequest
 
 
