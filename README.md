@@ -3,20 +3,28 @@
 Real-time Airfare Price Index for India, built from automated fare
 collection across airline/OTA sources, for augmentation of the CPI.
 
-## Status — fully executed and verified locally (2026-09-06)
+## Status — fully executed, verified locally (2026-09-06) and in cloud CI (2026-09-08)
 
-Every component now **runs and has been executed end-to-end on a real
+Every component **runs and has been executed end-to-end on a real
 machine**: Python 3.11 + PostgreSQL 16 + FastAPI/uvicorn backend,
 React/Vite/TypeScript frontend, Alembic migrations, JWT/RBAC auth, rate
 limiting, scheduled ingestion, and a live-browser login flow.
 
-The only thing **not** runtime-verified is `docker compose up` — no
-Docker daemon exists on this host — but the compose file and both
-Dockerfiles are statically verified (valid YAML, all build paths exist,
-backend image self-bootstraps: `alembic upgrade head` → seed → serve).
-That container boot chain was additionally **executed verbatim on host
-Postgres against a brand-new database** (migrate → seed with env-provided
-admin creds → serve → login → dashboard summary), then dropped.
+Since 2026-09-08 the project also lives on GitHub
+(`Barathraj009/AirIndex`, branch `main`) and **every verification step
+runs automatically in cloud CI on every push**, including the one thing
+a Docker-less dev host could not do. GitHub-hosted runners (Ubuntu,
+real Docker) run:
+
+- **`compose-verify`** — builds both images and `docker compose up`s the
+  full stack (db + backend + frontend), waits for health, smoke-tests
+  login → `/auth/me` → `/dashboard/summary`, curls the frontend, checks
+  seed idempotency in-container. **Passing.**
+- **`ci`** — backend: `alembic upgrade head` + zero-drift `alembic
+  check` + the full 75-test suite against Postgres 16; frontend:
+  `npm ci` + `npm run typecheck` + production build; end-to-end:
+  real-Chromium login flow (8 checks) + full 13-route page walk against
+  the production build + live backend. **Passing.**
 See `docs/VERIFICATION_LOG.md` for the full per-item record.
 
 ## What's built and verified
@@ -197,3 +205,11 @@ math and rationale: `backend/app/services/index_engine.py` docstring and
 - `docs/ROBOTS_TXT_FINDINGS.md` — live robots.txt findings per airline.
 - `deployment/` — `docker-compose.yml`, both Dockerfiles,
   `schema_postgres.sql` (superseded reference; use Alembic).
+
+## Cloud CI
+
+Workflows live in `.github/workflows/` and run on every push to `main`:
+`ci.yml` (backend tests + Alembic drift, frontend typecheck/build, and a
+Playwright browser e2e against the real stack) and `compose-verify.yml`
+(the full `docker compose up` stack). Health: both **passing** on
+`Barathraj009/AirIndex`.

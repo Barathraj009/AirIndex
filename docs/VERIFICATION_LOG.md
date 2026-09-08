@@ -509,3 +509,46 @@ re-run. No data was lost (WAL redo); this is a characteristic of the
 sandbox host, not of the AirIndex services. On target deployment
 machines (Docker container or a normal service install) this does not
 occur.
+
+## Cloud CI on GitHub Actions — 2026-09-08 (fills the Docker gap)
+
+The project was pushed to `https://github.com/Barathraj009/AirIndex`
+(branch `main`, private→public user repo), and the two Docker/CI gaps
+left on the flaky local host are now verified headlessly on
+GitHub-hosted Ubuntu runners on **every push**:
+
+1. **`compose-verify`** — the real `docker compose up` (db + backend +
+   frontend) now executes: images build, stack starts, backend health,
+   login → `/auth/me` ADMIN → `/dashboard/summary`, frontend :5173 curl,
+   in-container seed rerun prints `already populated`. **PASSING.**
+2. **`ci`** — three jobs:
+   - backend tests + alembic drift (Postgres 16 service): `alembic
+     upgrade head`, `alembic check` (zero drift), full suite
+     (75 tests) against `airindex_test` — **PASSING**;
+   - frontend typecheck + production build — **PASSING**;
+   - browser smoke: backend + `vite preview` on the built SPA, then
+     real Chromium login flow **8/8** and full route walk **13/13**
+     (scripts shipped as `scripts/browser/*.py`) — **PASSING**.
+
+Two real defects were caught and fixed by the first cloud run:
+
+- **e2e boot bug**: the server-start step did `cd frontend` relative to
+  `backend/`, so `vite preview` silently never started and the health
+  gate timed out (`curl` exit 7). Fixed with `$GITHUB_WORKSPACE`-
+  absolute paths + explicit failure reporting. 
+- **backend image build bug**: `playwright install --with-deps
+  chromium` exits 100 inside the `python:3.12-slim` build (unused by
+  demo/compose flows). Removed from `Dockerfile.backend`; browsers are
+  runtime-installable for future real scrapers.
+
+Relevant run records: ci run `34196809040` (3/3 jobs green), compose-
+verify run `34196809068` (1/1 green) — both on commit `77d2377`;
+initial failures (`34191449432`, `34191449410`) documented the two fixes
+above.
+
+### Remaining gaps (unchanged, narrow)
+
+The app is not deployed to a public host (that is the deploy step, out
+of scope for verification); with this CI, `docker compose up` and the
+full test/browser matrix are now proven on every commit rather than only
+on this host.
