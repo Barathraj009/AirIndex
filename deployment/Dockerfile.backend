@@ -7,10 +7,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt /app/backend/requirements.txt
-# Browsers are NOT baked into the image: `playwright install --with-deps
-# chromium` fails in a minimal slim build and is never exercised by the
-# demo/compose-verify flows (DEMO_GENERATOR source has no browser path).
-# Run it at runtime if a future non-demo scraping adapter needs it.
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend /app/backend
@@ -21,6 +17,5 @@ ENV PORT=8000
 
 EXPOSE 8000
 
-# Self-bootstrap: apply the Alembic baseline, seed (idempotent) the demo
-# panel/admin user, then serve. All steps are safe to re-run.
-CMD ["sh", "-c", "alembic upgrade head && python /app/scripts/seed_database.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Wait for database to be ready, then run migrations and seed
+CMD ["sh", "-c", "echo 'Waiting for database...' && for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do python -c \"import sqlalchemy; sqlalchemy.create_engine('${DATABASE_URL}'.replace('postgresql://', 'postgresql+psycopg2://')).connect()\" && break || echo \"Attempt $i failed, retrying in 5s...\" && sleep 5; done && alembic upgrade head && python /app/scripts/seed_database.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
