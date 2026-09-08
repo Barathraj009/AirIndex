@@ -31,6 +31,7 @@ function createApp(options = {}) {
   const app = express();
 
   if (config.trustProxy) app.set('trust proxy', config.trustProxy);
+  else app.set('trust proxy', 1);
 
   // ---- Core middleware ----
   app.use(helmet());
