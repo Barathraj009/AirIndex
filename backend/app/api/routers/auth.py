@@ -19,12 +19,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/check-user")
-def check_user(email: str, db: Session = Depends(get_db)):
+def check_user(payload: SeedUserRequest, db: Session = Depends(get_db)):
     """Check if a user exists by email address."""
-    user = db.query(User).filter(User.email == email.lower()).first()
+    user = db.query(User).filter(User.email == payload.email.lower()).first()
     return OtpCheckUserResponse(
         exists=user is not None,
-        email=email.lower()
+        email=payload.email.lower()
     )
 
 
