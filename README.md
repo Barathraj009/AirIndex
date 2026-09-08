@@ -82,6 +82,14 @@ See `docs/VERIFICATION_LOG.md` for the full per-item record.
   pages with full navigation, typed API client, Change Password modal, and auth guards.
 - **Seed** (`scripts/seed_database.py`) — idempotent: 16 routes, 7330 fare observations,
   multi-role accounts (ADMIN, ANALYST, VIEWER), all data sources, DGCA benchmark data.
+- **Report Generation** (`backend/app/services/reports.py`) — PDF executive reports
+  (reportlab) and Excel workbooks (openpyxl) from IndexResult. Available via
+  `GET /api/reports/export?formats=pdf,excel` with auth.
+- **Surge Alert Notifications** (`backend/app/services/alerts.py`) — Configurable
+  threshold-based alerting with SMTP email and webhook notification channels.
+  `GET /api/alerts/check` and `POST /api/alerts/check-and-notify` endpoints.
+- **Deployment Analysis** (`DEPLOYMENT_ANALYSIS.md`) — Free platform comparison
+  (Render recommended) with migration steps and env var mapping.
 
 
 ## Test suite — 75 tests, all passing
