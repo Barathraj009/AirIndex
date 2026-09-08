@@ -26,7 +26,7 @@ if config.config_file_name is not None:
 
 # Override the placeholder URL in alembic.ini with the real one from
 # app settings (.env), so there's exactly one place DATABASE_URL lives.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+config.set_main_option("sqlalchemy.url", get_settings().database_url_fixed)
 
 target_metadata = Base.metadata
 

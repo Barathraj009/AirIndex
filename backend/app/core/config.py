@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
 
+    @property
+    def database_url_fixed(self) -> str:
+        """Fix Render's postgresql:// to postgresql+psycopg2://"""
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            url = "postgresql+psycopg2://" + url[len("postgresql://"):]
+        return url
+
 
 @lru_cache
 def get_settings() -> Settings:
