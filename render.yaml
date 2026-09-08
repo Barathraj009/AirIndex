@@ -30,7 +30,7 @@ services:
         value: "true"
       - key: COOKIE_SAMESITE
         value: none
-    healthCheckPath: /api/auth/health
+    healthCheckPath: /api/health
 
   - type: web
     name: airindex-backend
@@ -46,11 +46,11 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: OTP_SERVICE_JWT_SECRET
-        sync: false
+        value: placeholder
       - key: SEED_ADMIN_EMAIL
         sync: false
       - key: SEED_ADMIN_PASSWORD
-        generateValue: true
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: PYTHONPATH
