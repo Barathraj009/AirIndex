@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.api.deps import require_permission, get_current_user
+from app.api.deps import require_permission
 from app.services.index_engine import IndexConfig, compute_index
 from app.services.reports import export_index, export_index_pdf, export_index_excel
 from app.api.query_helpers import load_observations_df
