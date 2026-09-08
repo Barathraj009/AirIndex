@@ -28,11 +28,13 @@ export default function Login() {
     return () => clearTimeout(t)
   }, [resendCooldown])
 
+  const OTP_SERVICE_URL = import.meta.env.VITE_OTP_SERVICE_URL || '/otp-auth'
+
   const handleSendOtp = useCallback(async () => {
     setError(null)
     setSubmitting(true)
     try {
-      const res = await fetch('/otp-auth/api/auth/send-otp', {
+      const res = await fetch(`${OTP_SERVICE_URL}/api/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -59,7 +61,7 @@ export default function Login() {
     setSubmitting(true)
     try {
       // Verify OTP with the OTP service
-      const verifyRes = await fetch('/otp-auth/api/auth/verify-otp', {
+      const verifyRes = await fetch(`${OTP_SERVICE_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp: otpCode }),
