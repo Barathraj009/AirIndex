@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://airindex-backend.onrender.com/api'
 
 function getToken(): string | null {
   return localStorage.getItem('airindex_access_token')
