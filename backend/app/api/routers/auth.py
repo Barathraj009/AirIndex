@@ -199,10 +199,13 @@ def otp_exchange(payload: OtpExchangeRequest, db: Session = Depends(get_db)):
 
 @router.post("/seed-user")
 def seed_user(payload: SeedUserRequest, db: Session = Depends(get_db)):
-    """Seed a new user (dev only)."""
+    """Seed or update a user (dev only)."""
     existing = db.query(User).filter(User.email == payload.email.lower()).first()
     if existing:
-        return {"status": "user_exists", "email": payload.email}
+        existing.hashed_password = hash_password(payload.password)
+        existing.username = payload.username
+        db.commit()
+        return {"status": "updated", "email": payload.email, "username": payload.username}
     
     if db.query(User).filter(User.username == payload.username).first():
         return {"status": "username_taken", "username": payload.username}
