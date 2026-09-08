@@ -17,7 +17,7 @@ services:
       - key: GMAIL_APP_PASSWORD
         sync: false
       - key: EMAIL_TRANSPORT
-        value: json
+        value: gmail
       - key: GMAIL_ONLY
         value: "true"
       - key: OTP_HASH_SECRET
