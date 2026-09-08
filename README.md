@@ -1,5 +1,8 @@
 # AirIndex India — SIH 2026, PS 26056
 
+[![ci](https://img.shields.io/github/actions/workflow/status/Barathraj009/AirIndex/ci.yml?branch=main&label=ci)](https://github.com/Barathraj009/AirIndex/actions/workflows/ci.yml)
+[![compose-verify](https://img.shields.io/github/actions/workflow/status/Barathraj009/AirIndex/compose-verify.yml?branch=main&label=compose-verify)](https://github.com/Barathraj009/AirIndex/actions/workflows/compose-verify.yml)
+
 Real-time Airfare Price Index for India, built from automated fare
 collection across airline/OTA sources, for augmentation of the CPI.
 

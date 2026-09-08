@@ -187,6 +187,13 @@ jobs:
           done
           curl -sf http://localhost:4173/login > /dev/null || { echo "preview failed"; cat /tmp/preview.log; exit 1; }
           echo "backend + preview up"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
       - name: Login flow smoke (8 checks)
