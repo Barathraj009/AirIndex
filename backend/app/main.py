@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.rate_limit import RateLimitMiddleware
-from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin
+from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin, alerts, reports
 
 settings = get_settings()
 
@@ -56,6 +56,8 @@ app.include_router(exports.router)
 app.include_router(analytics.router)
 app.include_router(cpi.router)
 app.include_router(bulletin.router)
+app.include_router(alerts.router)
+app.include_router(reports.router)
 
 
 
