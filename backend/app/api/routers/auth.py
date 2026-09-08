@@ -11,7 +11,7 @@ from app.models.auth import User, AuditLogEntry
 from app.schemas.auth import (
     LoginRequest, TokenResponse, RefreshRequest, UserOut,
     OtpExchangeRequest, OtpVerifyRequest, OtpCheckUserResponse,
-    RegisterWithOtpRequest, ChangePasswordRequest
+    RegisterWithOtpRequest, ChangePasswordRequest, SeedUserRequest
 )
 from app.api.deps import get_current_user, _token_config
 
@@ -195,3 +195,26 @@ def otp_exchange(payload: OtpExchangeRequest, db: Session = Depends(get_db)):
     refresh = create_refresh_token(user.email, config)
 
     return TokenResponse(access_token=access, refresh_token=refresh)
+
+
+@router.post("/seed-user")
+def seed_user(payload: SeedUserRequest, db: Session = Depends(get_db)):
+    """Seed a new user (dev only)."""
+    existing = db.query(User).filter(User.email == payload.email.lower()).first()
+    if existing:
+        return {"status": "user_exists", "email": payload.email}
+    
+    if db.query(User).filter(User.username == payload.username).first():
+        return {"status": "username_taken", "username": payload.username}
+    
+    user = User(
+        email=payload.email.lower(),
+        username=payload.username,
+        hashed_password=hash_password(payload.password),
+        role="ADMIN",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"status": "created", "email": payload.email, "username": payload.username}

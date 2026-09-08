@@ -59,6 +59,12 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class SeedUserRequest(BaseModel):
+    email: EmailStr
+    username: str
+    password: str
+
+
 class UserRoleUpdate(BaseModel):
     role: str
 
