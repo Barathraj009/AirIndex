@@ -2,6 +2,8 @@ import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plane } from 'lucide-react'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+
 type Step = 'email' | 'credentials'
 
 export default function Login() {
@@ -22,7 +24,7 @@ export default function Login() {
     setError(null)
     setSubmitting(true)
     try {
-      const res = await fetch('/api/auth/check-user', {
+      const res = await fetch(`${API_BASE}/auth/check-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -47,7 +49,7 @@ export default function Login() {
     setSubmitting(true)
     try {
       if (userExists) {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(`${API_BASE}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
@@ -70,7 +72,7 @@ export default function Login() {
           setError('Password must be at least 4 characters')
           return
         }
-        const res = await fetch('/api/auth/seed-user', {
+        const res = await fetch(`${API_BASE}/auth/seed-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -84,7 +86,7 @@ export default function Login() {
           setError(body.detail || `Registration failed (${res.status})`)
           return
         }
-        const loginRes = await fetch('/api/auth/login', {
+        const loginRes = await fetch(`${API_BASE}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
