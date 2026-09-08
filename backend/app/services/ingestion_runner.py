@@ -29,6 +29,7 @@ def _adapter_registry():
     from ingestion.adapters.gds_adapter import GdsAdapter
     from ingestion.adapters.metasearch_adapter import MetasearchAdapter
     from ingestion.adapters.mospi_adapter import MospiCpiAdapter
+    from ingestion.adapters.kiwi_adapter import KiwiFlightAdapter
     from ingestion.adapters.base import CollectionRequest
 
     registry = dict(ADAPTER_REGISTRY)
@@ -36,6 +37,7 @@ def _adapter_registry():
     registry.setdefault("GOOGLE_FLIGHTS_API", GdsAdapter)
     registry.setdefault("GOOGLE_FLIGHTS", MetasearchAdapter)
     registry.setdefault("MOSPI_CPI", MospiCpiAdapter)
+    registry.setdefault("KIWI_FLIGHTS", KiwiFlightAdapter)
     return registry, CollectionRequest
 
 

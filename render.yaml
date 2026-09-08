@@ -47,6 +47,8 @@ services:
         generateValue: true
       - key: OTP_SERVICE_JWT_SECRET
         value: placeholder
+      - key: KIWI_API_KEY
+        sync: false
       - key: SEED_ADMIN_EMAIL
         sync: false
       - key: SEED_ADMIN_PASSWORD

@@ -50,6 +50,7 @@ def seed():
             ("GOOGLE_FLIGHTS_API", "LIVE_SCRAPE"),
             ("GOOGLE_FLIGHTS", "LIVE_SCRAPE"),
             ("MOSPI_CPI", "PUBLIC_DATASET"),
+            ("KIWI_FLIGHTS", "LIVE_SCRAPE"),
         ]
         for sname, stype in sources_to_seed:
             if db.query(DataSource).filter(DataSource.name == sname).first() is None:
