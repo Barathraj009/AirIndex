@@ -6,9 +6,11 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.rate_limit import RateLimitMiddleware
-from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics
+from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin
 
 settings = get_settings()
+
+
 
 
 @asynccontextmanager
@@ -52,6 +54,10 @@ app.include_router(backtesting.router)
 app.include_router(admin.router)
 app.include_router(exports.router)
 app.include_router(analytics.router)
+app.include_router(cpi.router)
+app.include_router(bulletin.router)
+
+
 
 
 @app.exception_handler(Exception)

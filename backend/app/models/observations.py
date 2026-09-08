@@ -51,4 +51,7 @@ class FareObservation(Base):
     __table_args__ = (
         Index("ix_route_period", "origin", "destination", "travel_date"),
         Index("ix_route_window_period", "origin", "destination", "booking_window_days", "travel_date"),
+        Index("ix_obs_window_quality", "booking_window_days", "data_quality_status"),
+        Index("ix_obs_airline_date", "airline", "travel_date"),
     )
+

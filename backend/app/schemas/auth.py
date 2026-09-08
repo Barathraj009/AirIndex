@@ -34,3 +34,13 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str = "VIEWER"
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class UserRoleUpdate(BaseModel):
+    role: str
+

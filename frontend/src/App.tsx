@@ -15,6 +15,8 @@ import Backtesting from './pages/Backtesting'
 import Methodology from './pages/Methodology'
 import ApiDocs from './pages/ApiDocs'
 import Admin from './pages/Admin'
+import CpiAugmentation from './pages/CpiAugmentation'
+import GeospatialMap from './pages/GeospatialMap'
 
 export default function App() {
   return (
@@ -30,6 +32,8 @@ export default function App() {
         >
           <Route index element={<Overview />} />
           <Route path="index" element={<AirfarePriceIndex />} />
+          <Route path="cpi-simulator" element={<CpiAugmentation />} />
+          <Route path="geospatial-map" element={<GeospatialMap />} />
           <Route path="routes" element={<RouteAnalysis />} />
           <Route path="heatmap" element={<SectorHeatmap />} />
           <Route path="lead-time" element={<LeadTimeAnalysis />} />
@@ -46,3 +50,4 @@ export default function App() {
     </BrowserRouter>
   )
 }
+

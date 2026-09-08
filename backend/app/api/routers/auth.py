@@ -7,11 +7,24 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, TokenError
-from app.models.auth import User
-from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest, UserOut, OtpExchangeRequest
+from app.models.auth import User, AuditLogEntry
+from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest, UserOut, OtpExchangeRequest, ChangePasswordRequest
 from app.api.deps import get_current_user, _token_config
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.post("/change-password")
+def change_password(payload: ChangePasswordRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not verify_password(payload.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="incorrect_old_password")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="password_too_short")
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.add(AuditLogEntry(user_id=current_user.id, user_email=current_user.email, action="CHANGE_PASSWORD", entity_type="User", entity_id=str(current_user.id)))
+    db.commit()
+    return {"status": "password_updated"}
+
 
 
 @router.post("/login", response_model=TokenResponse)

@@ -30,6 +30,25 @@ export interface IndexTrend {
   methodology_version: string
 }
 
+export interface ForecastPoint {
+  period: string
+  forecast_value: number
+  lower_80: number
+  upper_80: number
+  lower_95: number
+  upper_95: number
+  trend_direction: 'UPWARD' | 'DOWNWARD' | 'STABLE'
+}
+
+export interface IndexForecastResult {
+  forecast_available: boolean
+  historical_periods_used: number
+  monthly_drift_rate: number
+  projected_horizon_growth_pct: number
+  forecast_points: ForecastPoint[]
+  note?: string
+}
+
 export interface DashboardSummary {
   index: IndexResult
   n_routes_tracked: number
@@ -95,6 +114,34 @@ export interface IngestionRunRow {
   error_message: string | null
 }
 
+export interface DataSourceItem {
+  id: number
+  name: string
+  source_type: string
+  active: boolean
+  last_success_at: string | null
+  last_failure_reason: string | null
+}
+
+export interface UserItem {
+  id: number
+  email: string
+  role: 'ADMIN' | 'ANALYST' | 'VIEWER' | string
+  is_active: boolean
+}
+
+export interface IndexConfigItem {
+  id: number
+  base_period: string
+  methodology_version: string
+  booking_window_weights: Record<string, number> | null
+  include_suspicious: boolean
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+  notes: string | null
+}
+
 export interface BacktestResult {
   start_period: string
   end_period: string
@@ -116,4 +163,39 @@ export interface AuditLogRow {
   entity_id: string | null
   details: Record<string, unknown> | null
   timestamp: string
+}
+
+export interface CpiPoint {
+  period: string
+  official_general_cpi: number
+  augmented_general_cpi: number
+  official_transport_cpi: number
+  augmented_transport_cpi: number
+  apix_value: number
+  inflation_delta_bps: number
+}
+
+export interface CpiSimulationResponse {
+  airfare_weight_pct: number
+  transport_weight_pct: number
+  points: CpiPoint[]
+  mean_headline_delta_bps: number
+  max_headline_delta_bps: number
+  lag_reduction_days_est: number
+  policy_summary: string
+}
+
+export interface FareAnomaly {
+  route: string
+  origin: string
+  destination: string
+  airline: string
+  travel_date: string
+  booking_window_days: number | null
+  observed_fare: number
+  route_median_fare: number
+  deviation_pct: number
+  anomaly_type: string
+  severity: 'HIGH' | 'MEDIUM' | 'LOW'
+  description: string
 }

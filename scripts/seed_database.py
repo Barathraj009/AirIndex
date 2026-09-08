@@ -45,23 +45,45 @@ def seed():
                 db.add(Route(origin=origin, destination=dest, weight=weight, distance_tier=tier))
             print(f"Seeded {len(ROUTE_BASKET)} routes.")
 
-        if db.query(DataSource).filter(DataSource.name == "DEMO_GENERATOR").first() is None:
-            db.add(DataSource(name="DEMO_GENERATOR", source_type="DEMO_SIMULATED", active=True))
-            print("Seeded DEMO_GENERATOR data source.")
+        sources_to_seed = [
+            ("DEMO_GENERATOR", "DEMO_SIMULATED"),
+            ("GOOGLE_FLIGHTS_API", "LIVE_SCRAPE"),
+            ("GOOGLE_FLIGHTS", "LIVE_SCRAPE"),
+        ]
+        for sname, stype in sources_to_seed:
+            if db.query(DataSource).filter(DataSource.name == sname).first() is None:
+                db.add(DataSource(name=sname, source_type=stype, active=True))
+                print(f"Seeded {sname} data source.")
 
         admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@airindex.gov.in")
         admin_password = os.getenv("SEED_ADMIN_PASSWORD", "change-me-immediately")
 
-        if db.query(User).filter(User.email == admin_email).first() is None:
-            db.add(User(
-                email=admin_email,
-                hashed_password=hash_password(admin_password),
-                role="ADMIN",
-            ))
-            hint = " — CHANGE THIS" if admin_password == "change-me-immediately" else " (env-provided)"
-            print(f"Seeded default admin user ({admin_email}{hint}).")
+        users_to_seed = [
+            (admin_email, admin_password, "ADMIN"),
+            ("analyst@airindex.gov.in", "analyst123", "ANALYST"),
+            ("viewer@airindex.gov.in", "viewer123", "VIEWER"),
+        ]
+        for uemail, upass, urole in users_to_seed:
+            if db.query(User).filter(User.email == uemail).first() is None:
+                db.add(User(email=uemail, hashed_password=hash_password(upass), role=urole))
+                print(f"Seeded user ({uemail}, {urole}).")
 
-        db.commit()
+        from app.models.backtesting import ReferenceDataPoint
+        from app.services.dgca_service import DGCA_HISTORICAL_BENCHMARK
+
+        if db.query(ReferenceDataPoint).count() == 0:
+            for dataset in ["DGCA_MONTHLY_AVG", "DGCA_DOMESTIC_BENCHMARK", "DEMO_REFERENCE"]:
+                for period, val in DGCA_HISTORICAL_BENCHMARK.items():
+                    factor = 1.0 if "DGCA" in dataset else 1.015
+                    db.add(ReferenceDataPoint(
+                        dataset_name=dataset,
+                        period=period,
+                        value=round(val * factor, 2),
+                        label="ALL_INDIA_AVG",
+                    ))
+            db.commit()
+            print("Seeded DGCA and demonstration benchmark reference datasets.")
+
 
         raw = generate_demo_observations(start_date=date(2026, 1, 1), n_months=6)
         clean_df, report = run_pipeline(raw, source="DEMO_SIMULATED", source_type="DEMO_SIMULATED")

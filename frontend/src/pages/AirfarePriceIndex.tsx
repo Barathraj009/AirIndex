@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
+import { useState, useMemo } from 'react'
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, StatCard, Card, LoadingState, ErrorState, EmptyState } from '../components/ui'
-import type { IndexResult, IndexTrend } from '../types'
+import type { IndexResult, IndexTrend, IndexForecastResult } from '../types'
 
 export default function AirfarePriceIndex() {
   const periodsQuery = useApiQuery<{ periods: string[] }>('/index/available-periods')
@@ -11,8 +11,40 @@ export default function AirfarePriceIndex() {
 
   const current = useApiQuery<IndexResult>('/index/current')
   const trend = useApiQuery<IndexTrend>(periodsParam ? `/index/trend?periods=${periodsParam}` : null, [periodsParam])
+  const forecastQuery = useApiQuery<IndexForecastResult>('/index/forecast?steps=3')
 
+  const [showForecast, setShowForecast] = useState<boolean>(true)
   const [sortBy, setSortBy] = useState<'contribution' | 'route'>('contribution')
+
+  const chartData = useMemo(() => {
+    const historical = (trend.data?.series ?? []).map((p) => ({
+      period: p.period,
+      actual_index: p.index_value,
+      forecast_index: null as number | null,
+      upper_95: null as number | null,
+      lower_95: null as number | null,
+    }))
+
+    if (!showForecast || !forecastQuery.data?.forecast_points) {
+      return historical
+    }
+
+    // Connect the last historical point with the forecast
+    if (historical.length > 0) {
+      const lastHist = historical[historical.length - 1]
+      lastHist.forecast_index = lastHist.actual_index
+    }
+
+    const projected = forecastQuery.data.forecast_points.map((fp) => ({
+      period: fp.period,
+      actual_index: null,
+      forecast_index: fp.forecast_value,
+      upper_95: fp.upper_95,
+      lower_95: fp.lower_95,
+    }))
+
+    return [...historical, ...projected]
+  }, [trend.data, forecastQuery.data, showForecast])
 
   if (current.loading) return <LoadingState label="Computing index…" />
   if (current.error) return <ErrorState message={current.error} />
@@ -44,16 +76,43 @@ export default function AirfarePriceIndex() {
         />
       </div>
 
-      <Card title="Trend" className="mb-6">
+      {/* Historical Trend & Forecast Chart */}
+      <Card title="Index Trajectory & Forward Forecast" className="mb-6">
+        <div className="flex justify-between items-center mb-4 text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowForecast(!showForecast)}
+              className={`px-3 py-1.5 rounded font-medium transition ${
+                showForecast ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              {showForecast ? '✓ Forward Forecast Active (+3 Months)' : '+ Show Forward Forecast'}
+            </button>
+            {forecastQuery.data?.forecast_available && showForecast && (
+              <span className="text-muted">
+                Projected 3-Mo Drift: <strong className="text-blue-700">{forecastQuery.data.projected_horizon_growth_pct > 0 ? '+' : ''}{forecastQuery.data.projected_horizon_growth_pct}%</strong>
+              </span>
+            )}
+          </div>
+        </div>
+
         {trend.loading && <LoadingState />}
-        {trend.data && trend.data.series.filter((p) => p.index_value !== null).length > 1 ? (
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={trend.data.series}>
+        {chartData.length > 1 ? (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="period" tick={{ fontSize: 12 }} />
               <YAxis domain={['auto', 'auto']} tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Line type="monotone" dataKey="index_value" stroke="#1d4ed8" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Legend />
+              <Line type="monotone" dataKey="actual_index" name="Observed APIx" stroke="#1d4ed8" strokeWidth={2.5} dot={{ r: 4 }} connectNulls />
+              {showForecast && (
+                <>
+                  <Line type="monotone" dataKey="forecast_index" name="Forecast Point" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 4 }} connectNulls />
+                  <Line type="monotone" dataKey="upper_95" name="Upper 95% Bound" stroke="#fbbf24" strokeWidth={1} strokeDasharray="2 2" dot={false} connectNulls />
+                  <Line type="monotone" dataKey="lower_95" name="Lower 95% Bound" stroke="#fbbf24" strokeWidth={1} strokeDasharray="2 2" dot={false} connectNulls />
+                </>
+              )}
             </LineChart>
           </ResponsiveContainer>
         ) : (

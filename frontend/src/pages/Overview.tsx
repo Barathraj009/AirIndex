@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, StatCard, Card, LoadingState, ErrorState } from '../components/ui'
-import type { DashboardSummary, DataQualitySummary } from '../types'
+import type { DashboardSummary, DataQualitySummary, FareAnomaly } from '../types'
 
 export default function Overview() {
   const summary = useApiQuery<DashboardSummary>('/dashboard/summary')
   const quality = useApiQuery<DataQualitySummary>('/data-quality/summary')
+  const anomaliesQuery = useApiQuery<{ total_anomalies: number; anomalies: FareAnomaly[] }>('/analytics/anomalies')
 
   if (summary.loading) return <LoadingState label="Loading dashboard…" />
   if (summary.error) return <ErrorState message={summary.error} />
@@ -17,11 +18,31 @@ export default function Overview() {
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .slice(0, 6)
 
+  const anomalies = anomaliesQuery.data?.anomalies ?? []
+
   return (
     <div>
       <PageHeader
-        title="Overview"
+        title="AirIndex India Overview"
         subtitle={`Airfare Price Index snapshot — base ${base_period}, current period ${current_period}`}
+        action={
+          <div className="flex gap-2">
+            <a
+              href="/api/exports/monthly-bulletin"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded font-medium shadow-sm transition"
+            >
+              📄 Export Monthly Bulletin
+            </a>
+            <Link
+              to="/cpi-simulator"
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium shadow-sm transition"
+            >
+              ⚡ CPI Augmentation
+            </Link>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -36,7 +57,33 @@ export default function Overview() {
         <StatCard label="Airlines tracked" value={n_airlines_tracked} sub={index.methodology_version} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Surge & Price Spike Alerts Card */}
+      {anomalies.length > 0 && (
+        <Card title="⚡ Live Surge Pricing & Price Gouging Alerts" className="mb-6 border-amber-200 bg-amber-50/40">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {anomalies.slice(0, 3).map((anom, idx) => (
+              <div key={idx} className="bg-white border border-amber-200 rounded-lg p-3 shadow-xs">
+                <div className="flex justify-between items-start mb-1">
+                  <span className="font-bold text-slate-800 text-xs">{anom.route}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                    anom.severity === 'HIGH' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {anom.severity} SURGE
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 font-semibold mb-1">+{anom.deviation_pct}% vs Route Median</p>
+                <p className="text-[11px] text-muted">{anom.description}</p>
+                <div className="mt-2 text-[10px] text-slate-500 flex justify-between">
+                  <span>Carrier: {anom.airline}</span>
+                  <span>{anom.booking_window_days ? `T+${anom.booking_window_days}` : anom.travel_date}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <Card title="Top route contributors to index change" className="lg:col-span-2">
           <div className="space-y-2">
             {topContributors.map(([route, val]) => (
@@ -58,9 +105,14 @@ export default function Overview() {
               </div>
             ))}
           </div>
-          <Link to="/routes" className="text-xs text-blue-600 mt-3 inline-block">
-            View full route analysis →
-          </Link>
+          <div className="flex gap-4 mt-3 text-xs">
+            <Link to="/routes" className="text-blue-600 hover:underline">
+              View full route analysis →
+            </Link>
+            <Link to="/geospatial-map" className="text-blue-600 hover:underline">
+              Explore Geospatial Corridor Map →
+            </Link>
+          </div>
         </Card>
 
         <Card title="Data quality snapshot">
@@ -81,15 +133,23 @@ export default function Overview() {
         </Card>
       </div>
 
-      <div className="mt-4">
-        <Card title="Methodology">
-          <p className="text-sm text-slate-600">
-            APIx is a modified Laspeyres route-weighted index. See the{' '}
-            <Link to="/methodology" className="text-blue-600">
-              full methodology page
-            </Link>{' '}
-            for the formula, weighting, and known limitations.
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card title="MoSPI CPI Augmentation Engine">
+          <p className="text-xs text-slate-600 mb-3">
+            Simulate how the real-time APIx index integrates into India's official Consumer Price Index Transport subgroup to reduce survey publication lag by ~45 days.
           </p>
+          <Link to="/cpi-simulator" className="text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded font-medium inline-block hover:bg-blue-100">
+            Open CPI Policy Simulator →
+          </Link>
+        </Card>
+
+        <Card title="Methodology & DGCA Calibration">
+          <p className="text-xs text-slate-600 mb-3">
+            APIx is a modified Laspeyres route-weighted index calibrated with DGCA passenger traffic volume and median booking-window aggregations.
+          </p>
+          <Link to="/methodology" className="text-xs bg-slate-100 text-slate-700 px-3 py-1.5 rounded font-medium inline-block hover:bg-slate-200">
+            Read Methodology Specification →
+          </Link>
         </Card>
       </div>
     </div>

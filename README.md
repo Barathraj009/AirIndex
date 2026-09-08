@@ -58,22 +58,31 @@ See `docs/VERIFICATION_LOG.md` for the full per-item record.
   (120 req/min, verified 429 + `Retry-After`), APScheduler cron job
   (every 6 h, disabled under `ENVIRONMENT=test`), CORS, global error
   handler, `/api/health`.
-- **Frontend** — React + TypeScript + Vite + Tailwind + Recharts. All
-  13 routes (12 dashboard pages + API docs), routing, typed API client,
-  plus a **new login/guard flow**: `Login.tsx`, `RequireAuth.tsx`,
-  layout logout, 401 → token-clear + redirect. `npm run typecheck`
-  clean, `npm run build` succeeds; live-browser smoke tests (Playwright
-  Chromium) passed: login flow **8/8** on both the dev server and the
-  production build served via `vite preview` (login → token → dashboard
-  → reload persists → no-token redirects → API 401 → logout), and a
-  full page walk **13/13 clean** (every route renders real content,
-  zero console errors, zero failed requests — no respawning hooks
-  crashes, no HTTP 500/404 routes).
-- **Seed** (`scripts/seed_database.py`) — idempotent, fixed RNG seed:
-  16 routes, 7330 fare observations (6990 valid / 170 suspicious / 33
-  invalid / 137 unavailable), 5 real airlines derived from the observed
-  data (Air India, Air India Express, Akasa Air, IndiGo, SpiceJet),
-  active index config (base period 2026-01), and the default admin user.
+- **MoSPI CPI Augmentation Simulator** (`backend/app/services/cpi_engine.py`,
+  `frontend/src/pages/CpiAugmentation.tsx`) — Models real-time integration
+  of APIx into official Consumer Price Index (Base 2012=100) Transport group
+  (~8.59% weight) and airfare subcomponent (~0.20% weight), computing headline
+  inflation delta (bps), volatility capture, and ~45 days reporting lag reduction.
+- **DGCA Traffic Calibration & Benchmarks** (`backend/app/services/dgca_service.py`) —
+  Route basket weights calibrated with official DGCA annual domestic city-pair
+  passenger traffic volume. 1-click admin auto-calibration and benchmark
+  reference datasets for backtesting.
+- **Geospatial Flight Corridor Map** (`frontend/src/pages/GeospatialMap.tsx`) —
+  Interactive SVG map of India with airport hubs and animated flight corridors
+  color-coded by fare inflation rate, with live Route Inspection HUD.
+- **Surge Anomaly Detection & Forecasting** (`backend/app/services/anomaly_detector.py`,
+  `backend/app/services/forecaster.py`) — Route price gouging / surge spike alerts
+  and 1–3 month time-series forward index projections with 80% & 95% confidence bands.
+- **Full Admin Console** (`frontend/src/pages/Admin.tsx`) — 5 dedicated tabs:
+  Route Weights (with DGCA auto-calibration), Data Sources controller, User
+  Management (roles & status toggling), Index Configuration, and Audit Log.
+- **Official Monthly Statistical Bulletin** (`backend/app/api/routers/bulletin.py`) —
+  Automated MoSPI/DGCA executive summary export (`/api/exports/monthly-bulletin`).
+- **Frontend** — React + TypeScript + Vite + Tailwind + Recharts. 15 comprehensive
+  pages with full navigation, typed API client, Change Password modal, and auth guards.
+- **Seed** (`scripts/seed_database.py`) — idempotent: 16 routes, 7330 fare observations,
+  multi-role accounts (ADMIN, ANALYST, VIEWER), all data sources, DGCA benchmark data.
+
 
 ## Test suite — 75 tests, all passing
 

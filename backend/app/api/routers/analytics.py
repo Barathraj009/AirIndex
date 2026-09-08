@@ -70,3 +70,13 @@ def airline_analysis(db: Session = Depends(get_db), _=Depends(require_permission
     grouped = grouped.sort_values("valid_observations", ascending=False)
 
     return {"airlines": grouped.round(2).to_dict("records")}
+
+
+@router.get("/anomalies")
+def get_fare_anomalies(db: Session = Depends(get_db), _=Depends(require_permission("view_dashboard"))):
+    from app.services.anomaly_detector import detect_fare_anomalies
+
+    df = load_observations_df(db)
+    anomalies = detect_fare_anomalies(df)
+    return {"total_anomalies": len(anomalies), "anomalies": anomalies}
+
