@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AirIndex India — dev_demo reference dashboard</title>
+<style>
+  :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --accent:#1d4ed8; --up:#dc2626; --down:#16a34a; --bg:#f8fafc; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding: 20px 28px; border-bottom:1px solid var(--line); background:#fff; display:flex; align-items:baseline; justify-content:space-between; }
+  header h1 { font-size: 18px; margin:0; }
+  .badge { font-size:11px; font-weight:700; letter-spacing:.04em; padding:3px 8px; border-radius:4px; background:#fef3c7; color:#92400e; }
+  main { padding: 24px 28px; max-width: 1100px; margin: 0 auto; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:16px; margin-bottom:24px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px 18px; }
+  .card .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .card .value { font-size:28px; font-weight:700; margin-top:4px; }
+  .card .sub { font-size:13px; color:var(--muted); margin-top:2px; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  section { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-bottom:20px; }
+  section h2 { font-size:14px; margin:0 0 12px 0; color:var(--ink); }
+  table { width:100%; border-collapse: collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  svg { display:block; }
+  .flags { font-size:12px; color:var(--muted); }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AirIndex India <span style="font-weight:400;color:var(--muted)">— dev_demo reference dashboard</span></h1>
+  <span class="badge" id="source-badge">LOADING…</span>
+</header>
+<main>
+  <div class="grid" id="summary-cards"></div>
+
+  <section>
+    <h2>APIx trend</h2>
+    <svg id="trend-chart" width="100%" height="220" viewBox="0 0 1000 220" preserveAspectRatio="none"></svg>
+  </section>
+
+  <section>
+    <h2>Route contribution to index change (basis points)</h2>
+    <div id="route-bars"></div>
+  </section>
+
+  <section>
+    <h2>Airline snapshot</h2>
+    <table id="airline-table">
+      <thead><tr><th>Airline</th><th>Valid observations</th><th>Median fare (₹)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Data quality</h2>
+    <div id="quality-summary"></div>
+  </section>
+</main>
+<footer>All figures on this page are DEMO/SIMULATED data generated for demonstration purposes — not live fares.</footer>
+
+<script>
+async function j(url) { const r = await fetch(url); return r.json(); }
+
+function card(label, value, sub, cls) {
+  return `<div class="card"><div class="label">${label}</div><div class="value ${cls||''}">${value}</div><div class="sub">${sub||''}</div></div>`;
+}
+
+function lineChart(svgEl, series) {
+  const w = 1000, h = 220, pad = 30;
+  const vals = series.map(p => p.index_value).filter(v => v !== null);
+  const min = Math.min(...vals) - 1, max = Math.max(...vals) + 1;
+  const xs = series.map((_, i) => pad + i * (w - 2*pad) / (series.length - 1));
+  const ys = series.map(p => p.index_value === null ? null : h - pad - (p.index_value - min) / (max - min) * (h - 2*pad));
+
+  let path = "";
+  xs.forEach((x, i) => { if (ys[i] !== null) path += (path ? "L" : "M") + x + "," + ys[i] + " "; });
+
+  let svg = `<line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="#e2e8f0"/>`;
+  svg += `<path d="${path}" fill="none" stroke="#1d4ed8" stroke-width="2.5"/>`;
+  xs.forEach((x, i) => {
+    if (ys[i] === null) return;
+    svg += `<circle cx="${x}" cy="${ys[i]}" r="3.5" fill="#1d4ed8"/>`;
+    svg += `<text x="${x}" y="${h-8}" font-size="10" fill="#64748b" text-anchor="middle">${series[i].period}</text>`;
+    svg += `<text x="${x}" y="${ys[i]-8}" font-size="10" fill="#0f172a" text-anchor="middle">${series[i].index_value.toFixed(1)}</text>`;
+  });
+  svgEl.innerHTML = svg;
+}
+
+function routeBars(container, contributions) {
+  const entries = Object.entries(contributions).sort((a,b) => b[1]-a[1]);
+  const max = Math.max(...entries.map(e => Math.abs(e[1]))) || 1;
+  let html = "";
+  entries.forEach(([route, val]) => {
+    const pct = Math.abs(val) / max * 100;
+    const cls = val >= 0 ? "up" : "down";
+    const side = val >= 0 ? "margin-left:50%;" : `margin-left:${50-pct/2}%;`;
+    html += `<div style="display:flex;align-items:center;gap:10px;margin:4px 0;font-size:12px;">
+      <div style="width:70px;">${route}</div>
+      <div style="flex:1;background:#f1f5f9;height:14px;border-radius:3px;position:relative;">
+        <div style="position:absolute;height:14px;width:${pct/2}%;${side}background:${val>=0?'#dc2626':'#16a34a'};border-radius:3px;"></div>
+      </div>
+      <div class="${cls}" style="width:60px;text-align:right;">${val.toFixed(3)}</div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+async function load() {
+  const summary = await j('/api/dashboard/summary');
+  document.getElementById('source-badge').textContent = summary.source_label;
+
+  const idx = summary.index;
+  const changeCls = idx.change_from_base_pct >= 0 ? 'up' : 'down';
+  const changeSign = idx.change_from_base_pct >= 0 ? '+' : '';
+
+  document.getElementById('summary-cards').innerHTML =
+    card('Current APIx', idx.index_value.toFixed(2), `Base ${idx.base_period} = 100.0`) +
+    card('Change vs base', `${changeSign}${idx.change_from_base_pct.toFixed(2)}%`, `as of ${idx.as_of_period}`, changeCls) +
+    card('Routes tracked', summary.n_routes_tracked, `${idx.n_observations_used} observations used`) +
+    card('Airlines tracked', summary.n_airlines_tracked, `Methodology ${idx.methodology_version}`) +
+    card('Data quality', `${summary.data_quality.valid_pct}%`, `${summary.data_quality.valid} of ${summary.data_quality.total_rows} rows VALID`);
+
+  const trend = await j('/api/index/trend');
+  lineChart(document.getElementById('trend-chart'), trend.series);
+
+  routeBars(document.getElementById('route-bars'), idx.route_contributions);
+
+  const airlines = await j('/api/airlines');
+  const tbody = document.querySelector('#airline-table tbody');
+  tbody.innerHTML = airlines.airlines.map(a =>
+    `<tr><td>${a.airline}</td><td>${a.valid_observations.toLocaleString()}</td><td>₹${a.median_fare_inr.toLocaleString()}</td></tr>`
+  ).join('');
+
+  const dq = await j('/api/data-quality/summary');
+  document.getElementById('quality-summary').innerHTML = `
+    <div class="grid">
+      ${card('Valid', dq.valid)}
+      ${card('Suspicious (outlier)', dq.suspicious)}
+      ${card('Invalid', dq.invalid)}
+      ${card('Unavailable', dq.unavailable)}
+    </div>
+    <div class="flags">Sample flags: ${dq.issues_sample.join(' · ')}</div>
+  `;
+}
+load();
+</script>
+</body>
+</html>

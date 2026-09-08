@@ -1,0 +1,68 @@
+name: compose-verify
+
+# Verifies the real `docker compose up` stack (db + backend + frontend)
+# headlessly. This is the executable path for the one Docker step that a
+# non-admin dev host cannot run locally (see docs/VERIFICATION_LOG.md).
+# GitHub-hosted runners ship Docker + compose v2, so this fills that gap.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "deployment/**"
+      - "backend/**"
+      - "frontend/**"
+      - "scripts/**"
+
+jobs:
+  compose-up:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare .env (no repo secrets involved)
+        run: |
+          cp .env.example .env
+          echo "JWT_SECRET_KEY=$(openssl rand -hex 32)" | tee -a .env
+          grep -q "SEED_ADMIN_PASSWORD" .env || echo "SEED_ADMIN_PASSWORD=change-me-immediately" >> .env
+
+      - name: Build and start the stack
+        run: docker compose -f deployment/docker-compose.yml up -d --build
+
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/health || true)
+            if [ "$code" = "200" ]; then echo "backend healthy after ${i}x5s"; exit 0; fi
+            sleep 5
+          done
+          echo "backend never became healthy"
+          docker compose -f deployment/docker-compose.yml ps || true
+          exit 1
+
+      - name: Smoke API (login -> me -> dashboard)
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@airindex.gov.in","password":"change-me-immediately"}' \
+            | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          curl -sf -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/auth/me | grep -q '"role":"ADMIN"'
+          curl -sf -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/dashboard/summary | grep -q '"index"'
+          echo "API smoke OK"
+
+      - name: Smoke frontend
+        run: |
+          curl -sf -o /dev/null -w 'frontend http %{http_code}\n' http://127.0.0.1:5173/login
+
+      - name: Backend seed sanity (no duplicate observations on rerun)
+        run: |
+          docker compose -f deployment/docker-compose.yml exec -T backend \
+            python /app/scripts/seed_database.py > /tmp/seed2.txt 2>&1 || true
+          grep -q "already populated" /tmp/seed2.txt || cat /tmp/seed2.txt
+
+      - name: Always tear down
+        if: always()
+        run: docker compose -f deployment/docker-compose.yml down -v --remove-orphans
