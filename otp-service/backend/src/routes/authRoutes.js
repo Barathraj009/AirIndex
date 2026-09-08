@@ -3,6 +3,8 @@ const authController = require('../controllers/authController');
 const validateEmail = require('../middleware/validateEmail');
 const { requireSession } = require('../middleware/auth');
 const { sendOtpLimiter, verifyOtpLimiter } = require('../middleware/rateLimiter');
+const { getLastTestMessage } = require('../services/emailService');
+const config = require('../config/env');
 
 const router = express.Router();
 
@@ -24,5 +26,20 @@ router.post('/logout', authController.logout);
 // `/session` and `/me` are aliases.
 router.get('/session', requireSession, authController.session);
 router.get('/me', requireSession, authController.session);
+
+// Dev-only endpoint: returns the last OTP when using json transport
+// (for demo/testing when SMTP is blocked, e.g. on Render free tier)
+if (config.email.transport === 'json') {
+  router.get('/dev/last-otp', (req, res) => {
+    const msg = getLastTestMessage();
+    if (!msg) {
+      return res.json({ otp: null, message: 'No OTP sent yet.' });
+    }
+    // Extract OTP from the message body (format: "Your verification code is: 123456")
+    const match = msg.text && msg.text.match(/code is: (\d{6})/);
+    const otp = match ? match[1] : null;
+    return res.json({ otp, message: otp ? 'Use this code to verify.' : 'Could not extract OTP.' });
+  });
+}
 
 module.exports = router;

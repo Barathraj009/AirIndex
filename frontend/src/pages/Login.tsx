@@ -22,6 +22,9 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [otpToken, setOtpToken] = useState('')
 
+  // Dev OTP display (json transport only)
+  const [devOtp, setDevOtp] = useState<string | null>(null)
+
   useEffect(() => {
     if (resendCooldown <= 0) return
     const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000)
@@ -48,6 +51,15 @@ export default function Login() {
       setMaskedEmail(data.maskedEmail || email)
       setResendCooldown(data.resendCooldownSeconds || 45)
       setStep('otp')
+
+      // Fetch dev OTP if using json transport
+      try {
+        const otpRes = await fetch(`${OTP_SERVICE_URL}/api/auth/dev/last-otp`)
+        if (otpRes.ok) {
+          const otpData = await otpRes.json()
+          if (otpData.otp) setDevOtp(otpData.otp)
+        }
+      } catch { /* ignore */ }
     } catch {
       setError('Could not reach the OTP service. Is it running on port 4000?')
     } finally {
@@ -204,6 +216,12 @@ export default function Login() {
               <div className="text-sm text-slate-600">
                 Code sent to <span className="font-medium text-slate-800">{maskedEmail}</span>
               </div>
+              {devOtp && (
+                <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-sm">
+                  <span className="font-semibold text-amber-700">Demo mode:</span> Your code is{' '}
+                  <span className="font-mono font-bold text-amber-800">{devOtp}</span>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="otp-code">
                   Verification code
