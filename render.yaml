@@ -1,10 +1,10 @@
 services:
   - type: web
     name: airindex-backend
-    runtime: python
+    runtime: docker
     plan: free
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && alembic upgrade head && python ../scripts/seed_database.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: deployment/Dockerfile.backend
+    dockerContext: .
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -19,7 +19,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: PYTHONPATH
-        value: /opt/render/project/src/backend
+        value: /app/backend
     healthCheckPath: /api/health
 
   - type: web

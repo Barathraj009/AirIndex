@@ -17,9 +17,10 @@ COPY backend /app/backend
 COPY scripts /app/scripts
 
 ENV PYTHONPATH=/app/backend
+ENV PORT=8000
 
 EXPOSE 8000
 
 # Self-bootstrap: apply the Alembic baseline, seed (idempotent) the demo
 # panel/admin user, then serve. All steps are safe to re-run.
-CMD ["sh", "-c", "alembic upgrade head && python /app/scripts/seed_database.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && python /app/scripts/seed_database.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
