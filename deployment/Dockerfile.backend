@@ -7,8 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt /app/backend/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt \
-    && playwright install --with-deps chromium
+# Browsers are NOT baked into the image: `playwright install --with-deps
+# chromium` fails in a minimal slim build and is never exercised by the
+# demo/compose-verify flows (DEMO_GENERATOR source has no browser path).
+# Run it at runtime if a future non-demo scraping adapter needs it.
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend /app/backend
 COPY scripts /app/scripts

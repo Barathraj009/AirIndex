@@ -164,27 +164,28 @@ jobs:
         run: python ../scripts/seed_database.py
       - name: Start backend (uvicorn) + production preview (vite)
         run: |
-          cd backend
+          cd "$GITHUB_WORKSPACE/backend"
           DATABASE_URL=postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex \
           ENVIRONMENT=development \
           JWT_SECRET_KEY=ci-not-for-production \
           CORS_ALLOWED_ORIGINS=http://localhost:4173,http://127.0.0.1:4173 \
           python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
           echo $! > /tmp/uvicorn.pid
-          cd frontend && nohup npm run preview -- --port 4173 --strictPort > /tmp/preview.log 2>&1 &
+          cd "$GITHUB_WORKSPACE/frontend"
+          nohup npm run preview -- --port 4173 --strictPort > /tmp/preview.log 2>&1 &
           echo $! > /tmp/preview.pid
-          for i in $(seq 1 40); do
+          for i in $(seq 1 20); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/health || true)
             [ "$code" = "200" ] && break
             sleep 5
           done
-          curl -sf http://127.0.0.1:8000/api/health > /dev/null
-          for i in $(seq 1 40); do
+          curl -sf http://127.0.0.1:8000/api/health > /dev/null || { echo "backend failed"; cat /tmp/uvicorn.log; exit 1; }
+          for i in $(seq 1 20); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4173/login || true)
             [ "$code" = "200" ] && break
             sleep 3
           done
-          curl -sf http://localhost:4173/login > /dev/null
+          curl -sf http://localhost:4173/login > /dev/null || { echo "preview failed"; cat /tmp/preview.log; exit 1; }
           echo "backend + preview up"
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
