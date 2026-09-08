@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers
-revision = '0002'
-down_revision = '0001'
+revision = '0002_add_username'
+down_revision = '0001_initial'
 branch_labels = None
 depends_on = None
 
