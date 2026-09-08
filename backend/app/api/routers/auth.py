@@ -8,10 +8,98 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token, TokenError
 from app.models.auth import User, AuditLogEntry
-from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest, UserOut, OtpExchangeRequest, ChangePasswordRequest
+from app.schemas.auth import (
+    LoginRequest, TokenResponse, RefreshRequest, UserOut,
+    OtpExchangeRequest, OtpVerifyRequest, OtpCheckUserResponse,
+    RegisterWithOtpRequest, ChangePasswordRequest
+)
 from app.api.deps import get_current_user, _token_config
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+@router.post("/check-user")
+def check_user(email: str, db: Session = Depends(get_db)):
+    """Check if a user exists by email address."""
+    user = db.query(User).filter(User.email == email.lower()).first()
+    return OtpCheckUserResponse(
+        exists=user is not None,
+        email=email.lower()
+    )
+
+
+@router.post("/register-with-otp", response_model=TokenResponse)
+def register_with_otp(payload: RegisterWithOtpRequest, db: Session = Depends(get_db)):
+    """Register a new user with username/password after OTP verification."""
+    settings = get_settings()
+
+    # Verify the OTP token
+    try:
+        otp_payload = jwt.decode(
+            payload.otp_token,
+            settings.otp_service_jwt_secret,
+            algorithms=["HS256"],
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_otp_token")
+
+    otp_email = otp_payload.get("email", "").lower()
+    if not otp_email or otp_payload.get("authMethod") != "gmail-otp":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_otp_token")
+
+    if otp_email != payload.email.lower():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="email_mismatch")
+
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == otp_email).first()
+    if existing_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_already_exists")
+
+    # Check if username is taken
+    if db.query(User).filter(User.username == payload.username).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="username_taken")
+
+    # Create new user
+    user = User(
+        email=otp_email,
+        username=payload.username,
+        hashed_password=hash_password(payload.password),
+        role="VIEWER",
+        is_active=True,
+    )
+    db.add(user)
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+
+    # Generate tokens
+    from app.core.security import Role
+    config = _token_config()
+    access = create_access_token(user.email, Role(user.role), config)
+    refresh = create_refresh_token(user.email, config)
+
+    return TokenResponse(access_token=access, refresh_token=refresh)
+
+
+@router.post("/login-with-password", response_model=TokenResponse)
+def login_with_password(payload: LoginRequest, db: Session = Depends(get_db)):
+    """Login with email and password (after OTP verification)."""
+    user = db.query(User).filter(User.email == payload.email.lower()).first()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
+
+    if not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
+
+    from app.core.security import Role
+    config = _token_config()
+    access = create_access_token(user.email, Role(user.role), config)
+    refresh = create_refresh_token(user.email, config)
+
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return TokenResponse(access_token=access, refresh_token=refresh)
 
 
 @router.post("/change-password")

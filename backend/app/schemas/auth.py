@@ -19,6 +19,7 @@ class RefreshRequest(BaseModel):
 class UserOut(BaseModel):
     id: int
     email: str
+    username: str | None = None
     role: str
     is_active: bool
 
@@ -28,6 +29,23 @@ class UserOut(BaseModel):
 class OtpExchangeRequest(BaseModel):
     otp_token: str
     email: EmailStr
+
+
+class OtpVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+
+class OtpCheckUserResponse(BaseModel):
+    exists: bool
+    email: str
+
+
+class RegisterWithOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    username: str
+    password: str
 
 
 class UserCreate(BaseModel):

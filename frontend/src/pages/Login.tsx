@@ -1,27 +1,26 @@
 import { FormEvent, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plane, Mail, KeyRound } from 'lucide-react'
+import { Plane, Mail, KeyRound, UserPlus } from 'lucide-react'
 
-type Tab = 'password' | 'otp'
+type Step = 'email' | 'otp' | 'credentials'
 
 export default function Login() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('password')
 
-  // Password login state
+  // OTP flow state
+  const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [otpCode, setOtpCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
-  // OTP state
-  const [otpEmail, setOtpEmail] = useState('')
-  const [otpStep, setOtpStep] = useState<'email' | 'otp'>('email')
-  const [otpCode, setOtpCode] = useState('')
-  const [otpError, setOtpError] = useState<string | null>(null)
-  const [otpSubmitting, setOtpSubmitting] = useState(false)
   const [maskedEmail, setMaskedEmail] = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
+
+  // Credentials state
+  const [userExists, setUserExists] = useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [otpToken, setOtpToken] = useState('')
 
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -29,25 +28,62 @@ export default function Login() {
     return () => clearTimeout(t)
   }, [resendCooldown])
 
-  async function handlePasswordSubmit(e: FormEvent) {
+  const handleSendOtp = useCallback(async () => {
+    setError(null)
+    setSubmitting(true)
+    try {
+      const res = await fetch('/otp-auth/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.detail || body.message || `Failed to send code (${res.status})`)
+        return
+      }
+      const data = await res.json()
+      setMaskedEmail(data.maskedEmail || email)
+      setResendCooldown(data.resendCooldownSeconds || 45)
+      setStep('otp')
+    } catch {
+      setError('Could not reach the OTP service. Is it running on port 4000?')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [email])
+
+  async function handleVerifyOtp(e: FormEvent) {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
     try {
-      const res = await fetch('/api/auth/login', {
+      // Verify OTP with the OTP service
+      const verifyRes = await fetch('/otp-auth/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, otp: otpCode }),
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        setError(body.detail || `Login failed (${res.status})`)
+      if (!verifyRes.ok) {
+        const body = await verifyRes.json().catch(() => ({}))
+        setError(body.detail || body.message || `Verification failed (${verifyRes.status})`)
         return
       }
-      const data = await res.json()
-      localStorage.setItem('airindex_access_token', data.access_token)
-      localStorage.setItem('airindex_refresh_token', data.refresh_token)
-      navigate('/', { replace: true })
+      const verifyData = await verifyRes.json()
+      setOtpToken(verifyData.token)
+
+      // Check if user exists
+      const checkRes = await fetch(`/api/auth/check-user?email=${encodeURIComponent(email)}`, {
+        method: 'POST',
+      })
+      if (checkRes.ok) {
+        const checkData = await checkRes.json()
+        setUserExists(checkData.exists)
+      } else {
+        setUserExists(false)
+      }
+
+      setStep('credentials')
     } catch {
       setError('Could not reach the API. Is the backend running?')
     } finally {
@@ -55,66 +91,63 @@ export default function Login() {
     }
   }
 
-  const handleSendOtp = useCallback(async () => {
-    setOtpError(null)
-    setOtpSubmitting(true)
-    try {
-      const res = await fetch('/otp-auth/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: otpEmail }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        setOtpError(body.detail || body.message || `Failed to send code (${res.status})`)
-        return
-      }
-      const data = await res.json()
-      setMaskedEmail(data.maskedEmail || otpEmail)
-      setResendCooldown(data.resendCooldownSeconds || 45)
-      setOtpStep('otp')
-    } catch {
-      setOtpError('Could not reach the OTP service. Is it running on port 4000?')
-    } finally {
-      setOtpSubmitting(false)
-    }
-  }, [otpEmail])
-
-  async function handleVerifyOtp(e: FormEvent) {
+  async function handleCredentialsSubmit(e: FormEvent) {
     e.preventDefault()
-    setOtpError(null)
-    setOtpSubmitting(true)
-    try {
-      const verifyRes = await fetch('/otp-auth/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: otpEmail, otp: otpCode }),
-      })
-      if (!verifyRes.ok) {
-        const body = await verifyRes.json().catch(() => ({}))
-        setOtpError(body.detail || body.message || `Verification failed (${verifyRes.status})`)
-        return
-      }
-      const verifyData = await verifyRes.json()
+    setError(null)
+    setSubmitting(true)
 
-      const exchangeRes = await fetch('/api/auth/otp/exchange', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp_token: verifyData.token, email: verifyData.email }),
-      })
-      if (!exchangeRes.ok) {
-        const body = await exchangeRes.json().catch(() => ({}))
-        setOtpError(body.detail || `Exchange failed (${exchangeRes.status})`)
-        return
+    try {
+      if (userExists) {
+        // Login with password
+        const res = await fetch('/api/auth/login-with-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          setError(body.detail || `Login failed (${res.status})`)
+          return
+        }
+        const data = await res.json()
+        localStorage.setItem('airindex_access_token', data.access_token)
+        localStorage.setItem('airindex_refresh_token', data.refresh_token)
+        navigate('/', { replace: true })
+      } else {
+        // Register new user
+        if (!username.trim()) {
+          setError('Username is required')
+          return
+        }
+        if (password.length < 6) {
+          setError('Password must be at least 6 characters')
+          return
+        }
+
+        const res = await fetch('/api/auth/register-with-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            otp: otpCode,
+            username: username.trim(),
+            password,
+          }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          setError(body.detail || `Registration failed (${res.status})`)
+          return
+        }
+        const data = await res.json()
+        localStorage.setItem('airindex_access_token', data.access_token)
+        localStorage.setItem('airindex_refresh_token', data.refresh_token)
+        navigate('/', { replace: true })
       }
-      const exchangeData = await exchangeRes.json()
-      localStorage.setItem('airindex_access_token', exchangeData.access_token)
-      localStorage.setItem('airindex_refresh_token', exchangeData.refresh_token)
-      navigate('/', { replace: true })
     } catch {
-      setOtpError('Could not reach the API. Is the backend running?')
+      setError('Could not reach the API. Is the backend running?')
     } finally {
-      setOtpSubmitting(false)
+      setSubmitting(false)
     }
   }
 
@@ -132,34 +165,12 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="flex border border-slate-200 rounded-md mb-6 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => { setTab('password'); setError(null) }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition-colors ${
-                tab === 'password' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <KeyRound size={14} />
-              Password
-            </button>
-            <button
-              type="button"
-              onClick={() => { setTab('otp'); setOtpError(null) }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition-colors ${
-                tab === 'otp' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Mail size={14} />
-              Email OTP
-            </button>
-          </div>
-
-          {tab === 'password' && (
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+          {/* Step 1: Email */}
+          {step === 'email' && (
+            <form onSubmit={(e) => { e.preventDefault(); handleSendOtp() }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="email">
-                  Email
+                  Gmail Address
                 </label>
                 <input
                   id="email"
@@ -169,21 +180,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="admin@airindex.gov.in"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="password">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="your-email@gmail.com"
                 />
               </div>
 
@@ -191,45 +188,16 @@ export default function Login() {
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !email}
                 className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                {submitting ? 'Signing in…' : 'Sign in'}
+                {submitting ? 'Sending…' : 'Send verification code'}
               </button>
             </form>
           )}
 
-          {tab === 'otp' && otpStep === 'email' && (
-            <form onSubmit={(e) => { e.preventDefault(); handleSendOtp() }} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="otp-email">
-                  Email
-                </label>
-                <input
-                  id="otp-email"
-                  type="email"
-                  required
-                  autoComplete="username"
-                  value={otpEmail}
-                  onChange={(e) => setOtpEmail(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="admin@airindex.gov.in"
-                />
-              </div>
-
-              {otpError && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{otpError}</div>}
-
-              <button
-                type="submit"
-                disabled={otpSubmitting}
-                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-              >
-                {otpSubmitting ? 'Sending…' : 'Send code'}
-              </button>
-            </form>
-          )}
-
-          {tab === 'otp' && otpStep === 'otp' && (
+          {/* Step 2: OTP Verification */}
+          {step === 'otp' && (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div className="text-sm text-slate-600">
                 Code sent to <span className="font-medium text-slate-800">{maskedEmail}</span>
@@ -252,14 +220,14 @@ export default function Login() {
                 />
               </div>
 
-              {otpError && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{otpError}</div>}
+              {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}
 
               <button
                 type="submit"
-                disabled={otpSubmitting || otpCode.length !== 6}
+                disabled={submitting || otpCode.length !== 6}
                 className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                {otpSubmitting ? 'Verifying…' : 'Verify'}
+                {submitting ? 'Verifying…' : 'Verify code'}
               </button>
 
               <div className="text-center">
@@ -269,7 +237,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={handleSendOtp}
-                    disabled={otpSubmitting}
+                    disabled={submitting}
                     className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                   >
                     Resend code
@@ -279,16 +247,81 @@ export default function Login() {
 
               <button
                 type="button"
-                onClick={() => { setOtpStep('email'); setOtpCode(''); setOtpError(null) }}
+                onClick={() => { setStep('email'); setOtpCode(''); setError(null) }}
                 className="w-full text-xs text-slate-500 hover:text-slate-700"
               >
                 Use a different email
               </button>
             </form>
           )}
+
+          {/* Step 3: Username/Password */}
+          {step === 'credentials' && (
+            <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+              <div className="text-sm text-slate-600">
+                {userExists ? (
+                  <span>Logged in as <span className="font-medium text-slate-800">{email}</span></span>
+                ) : (
+                  <span>Create account for <span className="font-medium text-slate-800">{email}</span></span>
+                )}
+              </div>
+
+              {!userExists && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="username">
+                    Username
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    required
+                    autoComplete="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Choose a username"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="password">
+                  {userExists ? 'Password' : 'Create password'}
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  autoComplete={userExists ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={userExists ? 'Enter your password' : 'At least 6 characters'}
+                />
+              </div>
+
+              {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}
+
+              <button
+                type="submit"
+                disabled={submitting || !password}
+                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {submitting ? 'Please wait…' : userExists ? 'Sign in' : 'Create account & sign in'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setStep('otp'); setPassword(''); setError(null) }}
+                className="w-full text-xs text-slate-500 hover:text-slate-700"
+              >
+                Back to verification
+              </button>
+            </form>
+          )}
         </div>
         <p className="mt-4 text-center text-xs text-muted">
-          Use the administrator account provisioned during seeding (see the project README).
+          {userExists ? 'Enter your password to sign in' : 'First time? We\'ll create your account after email verification.'}
         </p>
       </div>
     </div>
