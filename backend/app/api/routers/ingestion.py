@@ -1,4 +1,5 @@
 import sys
+import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,10 +33,13 @@ def trigger_ingestion(payload: TriggerIngestionRequest, db: Session = Depends(ge
     orchestration the scheduler (APScheduler, Phase 4) uses: each source's
     `.run()` either returns data or degrades to SOURCE UNAVAILABLE — never
     raises — so one bad source can't crash the request (spec section 12)."""
-    results = collect_from_sources(
-        db, source_names=payload.source_names or None,
-        triggered_by=current_user.email, run_action="TRIGGER_INGESTION",
-    )
+    try:
+        results = collect_from_sources(
+            db, source_names=payload.source_names or None,
+            triggered_by=current_user.email, run_action="TRIGGER_INGESTION",
+        )
+    except Exception as e:  # noqa: BLE001 - surface real error for debugging
+        raise HTTPException(status_code=500, detail=f"ingestion_orchestration_error: {type(e).__name__}: {e}")
     if not results:
         raise HTTPException(status_code=404, detail="no_matching_active_sources")
     return {"runs": results}

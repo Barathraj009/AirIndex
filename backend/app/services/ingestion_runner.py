@@ -65,55 +65,63 @@ def collect_from_sources(db: Session, source_names: list[str] | None = None,
         db.commit()
         db.refresh(run)
 
-        adapter_cls = registry.get(source.name)
-        if adapter_cls is None:
+        try:
+            adapter_cls = registry.get(source.name)
+            if adapter_cls is None:
+                run.status = "FAILED"
+                run.error_message = f"no_adapter_registered_for_{source.name}"
+                run.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                results.append({"source": source.name, "status": run.status, "detail": run.error_message})
+                continue
+
+            adapter = adapter_cls()
+            req = CollectionRequest(routes=routes, booking_windows=[1, 7, 15, 30, 45], as_of=date.today())
+            raw_df, err = adapter.run(req)
+
+            if raw_df is None:
+                source.last_failure_reason = err
+                run.status = "SOURCE_UNAVAILABLE"
+                run.error_message = err
+                run.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                results.append({"source": source.name, "status": run.status, "detail": err})
+                continue
+
+            clean_df, report = run_pipeline(raw_df, source=source.name, source_type=source.source_type)
+            rows = clean_df.to_dict("records")
+            # Idempotent insert: adapters may be deterministic (fixed RNG
+            # seed), so re-runs must not violate the unique observation_id
+            # constraint — skip rows already collected.
+            payload = records_json_safe([
+                {**{k: r[k] for k in r if k in FareObservation.__table__.columns.keys()},
+                 "ingestion_run_id": run.id} for r in rows
+            ])
+            inserted = db.execute(
+                pg_insert(FareObservation).values(payload)
+                .on_conflict_do_nothing(index_elements=[FareObservation.__table__.c.observation_id])
+            ).rowcount
+
+            source.last_success_at = datetime.now(timezone.utc)
+            run.status = "SUCCESS"
+            run.completed_at = datetime.now(timezone.utc)
+            run.rows_collected = inserted
+            run.rows_valid = report.valid
+            run.rows_invalid = report.invalid
+            run.rows_suspicious = report.suspicious
+            run.rows_unavailable = report.unavailable
+            db.add(AuditLogEntry(user_id=None, user_email=triggered_by,
+                                  action=run_action,
+                                  entity_type="DataSource",
+                                  entity_id=str(source.id), details={"rows_collected": inserted}))
+            db.commit()
+            results.append({"source": source.name, "status": run.status, "rows_collected": inserted})
+        except Exception as e:  # noqa: BLE001 - DB/adapter bugs must degrade to FAILED, never 500.
+            db.rollback()
             run.status = "FAILED"
-            run.error_message = f"no_adapter_registered_for_{source.name}"
+            run.error_message = f"{type(e).__name__}: {e}"
             run.completed_at = datetime.now(timezone.utc)
             db.commit()
             results.append({"source": source.name, "status": run.status, "detail": run.error_message})
-            continue
-
-        adapter = adapter_cls()
-        req = CollectionRequest(routes=routes, booking_windows=[1, 7, 15, 30, 45], as_of=date.today())
-        raw_df, err = adapter.run(req)
-
-        if raw_df is None:
-            source.last_failure_reason = err
-            run.status = "SOURCE_UNAVAILABLE"
-            run.error_message = err
-            run.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            results.append({"source": source.name, "status": run.status, "detail": err})
-            continue
-
-        clean_df, report = run_pipeline(raw_df, source=source.name, source_type=source.source_type)
-        rows = clean_df.to_dict("records")
-        # Idempotent insert: adapters may be deterministic (fixed RNG
-        # seed), so re-runs must not violate the unique observation_id
-        # constraint — skip rows already collected.
-        payload = records_json_safe([
-            {**{k: r[k] for k in r if k in FareObservation.__table__.columns.keys()},
-             "ingestion_run_id": run.id} for r in rows
-        ])
-        inserted = db.execute(
-            pg_insert(FareObservation).values(payload)
-            .on_conflict_do_nothing(index_elements=[FareObservation.__table__.c.observation_id])
-        ).rowcount
-
-        source.last_success_at = datetime.now(timezone.utc)
-        run.status = "SUCCESS"
-        run.completed_at = datetime.now(timezone.utc)
-        run.rows_collected = inserted
-        run.rows_valid = report.valid
-        run.rows_invalid = report.invalid
-        run.rows_suspicious = report.suspicious
-        run.rows_unavailable = report.unavailable
-        db.add(AuditLogEntry(user_id=None, user_email=triggered_by,
-                              action=run_action,
-                              entity_type="DataSource",
-                              entity_id=str(source.id), details={"rows_collected": inserted}))
-        db.commit()
-        results.append({"source": source.name, "status": run.status, "rows_collected": inserted})
 
     return results
