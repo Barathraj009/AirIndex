@@ -59,6 +59,10 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class CheckUserRequest(BaseModel):
+    email: EmailStr
+
+
 class SeedUserRequest(BaseModel):
     email: EmailStr
     username: str
