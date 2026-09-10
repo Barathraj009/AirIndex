@@ -21,6 +21,16 @@ async def lifespan(app: FastAPI):
 
     scheduler_enabled = settings.environment != "test"
     start_scheduler(settings.ingestion_schedule_cron, enabled=scheduler_enabled)
+
+    if scheduler_enabled:
+        # First-run CPI bootstrap: fetch MoSPI data so the table is
+        # populated even before the first daily refresh fires.
+        from app.services.scheduler_service import run_cpi_refresh
+        try:
+            run_cpi_refresh()
+        except Exception:
+            pass
+
     try:
         yield
     finally:
