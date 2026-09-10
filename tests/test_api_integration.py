@@ -205,13 +205,26 @@ class APIIntegrationTests(unittest.TestCase):
     # ---- backtesting ----
 
     def test_backtesting_reports_source_unavailable_honestly(self):
+        """Period far outside any seeded reference data must report
+        SOURCE UNAVAILABLE rather than fabricating comparison figures."""
+        token = self._login()["access_token"]
+        r = client.post("/api/backtesting/run", headers=self._auth(token),
+                        json={"start_period": "2027-01", "end_period": "2027-06"})
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertFalse(body["reference_available"])
+        self.assertIn("SOURCE UNAVAILABLE", body["note"])
+
+    def test_backtesting_reports_seeded_reference(self):
+        """Within the seeded DGCA reference window the comparison must
+        come back available with metrics and aligned points."""
         token = self._login()["access_token"]
         r = client.post("/api/backtesting/run", headers=self._auth(token),
                         json={"start_period": "2026-02", "end_period": "2026-08"})
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
-        self.assertFalse(body["reference_available"])
-        self.assertIn("SOURCE UNAVAILABLE", body["note"])
+        self.assertTrue(body["reference_available"])
+        self.assertGreater(len(body["points"]), 0)
 
     # ---- admin / exports ----
 
