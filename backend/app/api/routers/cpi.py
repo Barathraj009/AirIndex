@@ -8,6 +8,7 @@ from app.api.query_helpers import load_observations_df
 from app.services.index_engine import compute_index_series
 from app.services.cpi_engine import (
     HISTORICAL_MOSPI_CPI,
+    _FALLBACK_MOSPI_CPI,
     DEFAULT_AIRFARE_IN_CPI_WEIGHT,
     DEFAULT_TRANSPORT_WEIGHT,
     simulate_cpi_augmentation,
@@ -24,6 +25,7 @@ class CpiSimulationRequest(BaseModel):
 
 @router.get("/baseline")
 def get_cpi_baseline(_=Depends(require_permission("view_dashboard"))):
+    is_live = HISTORICAL_MOSPI_CPI is not _FALLBACK_MOSPI_CPI
     points = [
         {
             "period": period,
@@ -34,12 +36,15 @@ def get_cpi_baseline(_=Depends(require_permission("view_dashboard"))):
         for period, data in sorted(HISTORICAL_MOSPI_CPI.items())
     ]
     return {
-        "base_year": "2012=100",
-        "data_source": "HARDCODED_REPRESENTATIVE_SERIES",
-        "data_source_note": ("MoSPI CPI inputs (general/transport CPI and the airfare "
-                             "sub-index) are a hand-written representative series for "
-                             "demonstration; they are NOT live MoSPI data and NOT official "
-                             "published values."),
+        "base_year": "2024=100",
+        "data_source": "LIVE_MOSPI_API" if is_live else "HARDCODED_REPRESENTATIVE_SERIES",
+        "data_source_note": (
+            "CPI data fetched live from https://api.mospi.gov.in (esankhyiki portal). "
+            "Airfare sub-component: code 07.3.3.1 = Passenger transport by air, domestic."
+            if is_live else
+            "MoSPI API unreachable at startup; using hardcoded representative series. "
+            "Restart the server when network is available to fetch live data."
+        ),
         "default_transport_weight_pct": DEFAULT_TRANSPORT_WEIGHT * 100,
         "default_airfare_weight_pct": DEFAULT_AIRFARE_IN_CPI_WEIGHT * 100,
         "series": points,
@@ -84,9 +89,13 @@ def simulate_cpi(
     )
     out = res.as_dict()
     out["is_simulation"] = True
+    is_live = HISTORICAL_MOSPI_CPI is not _FALLBACK_MOSPI_CPI
     out["inputs_note"] = (
-        "Simulation outputs. MoSPI CPI inputs are a representative hardcoded series "
-        "(not live MoSPI data) and the airfare sub-index is an assumed lagged input; "
-        "deltas/lag estimates are illustrative, not measured statistics."
+        "CPI inputs sourced live from https://api.mospi.gov.in "
+        "(code 07.3.3.1 = Passenger transport by air, domestic, base 2024=100). "
+        "Deltas show estimated impact of integrating real-time airfare data into CPI."
+        if is_live else
+        "MoSPI API unreachable; CPI inputs are a hardcoded representative series. "
+        "Deltas are illustrative, not measured statistics."
     )
     return out

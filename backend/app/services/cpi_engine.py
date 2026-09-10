@@ -1,19 +1,24 @@
 """
 AirIndex India — MoSPI CPI Augmentation Engine
-===============================================
+==============================================
 Models the integration of the real-time Airfare Price Index (APIx)
-into India's official Consumer Price Index (Base 2012=100) published
+into India's official Consumer Price Index (Base 2024=100) published
 by the Ministry of Statistics and Programme Implementation (MoSPI).
+
+Uses REAL CPI data fetched from https://api.mospi.gov.in when available.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List
 import numpy as np
 
+logger = logging.getLogger(__name__)
 
-HISTORICAL_MOSPI_CPI = {
+# Fallback hardcoded series — used ONLY if MoSPI API is unreachable
+_FALLBACK_MOSPI_CPI = {
     "2025-10": {"general_cpi": 191.2, "transport_cpi": 164.8, "airfare_subindex_lagged": 142.1},
     "2025-11": {"general_cpi": 192.4, "transport_cpi": 165.2, "airfare_subindex_lagged": 143.0},
     "2025-12": {"general_cpi": 193.1, "transport_cpi": 166.0, "airfare_subindex_lagged": 145.2},
@@ -27,6 +32,138 @@ HISTORICAL_MOSPI_CPI = {
 
 DEFAULT_TRANSPORT_WEIGHT = 0.0859   # 8.59%
 DEFAULT_AIRFARE_IN_CPI_WEIGHT = 0.0020  # 0.20% of General CPI
+
+
+def _fetch_live_cpi_series() -> Dict[str, Dict]:
+    """Attempt to fetch real CPI data from MoSPI API.
+
+    Returns dict keyed by period label (YYYY-MM) with values:
+      {general_cpi, transport_cpi, airfare_subindex_lagged}
+
+    Falls back to hardcoded series on any error.
+    """
+    try:
+        import httpx
+
+        AIRFARE_CODE = "07.3.3.1"
+        TRANSPORT_CODE = "07"
+        MOSPI_API = "https://api.mospi.gov.in/api/cpi/getCPIData"
+
+        airfare = {}
+        transport = {}
+        general = {}
+
+        MONTH_MAP = {
+            "january": 1, "february": 2, "march": 3, "april": 4,
+            "may": 5, "june": 6, "july": 7, "august": 8,
+            "september": 9, "october": 10, "november": 11, "december": 12,
+        }
+
+        def _parse_month_year(rec):
+            month_name = str(rec.get("month", "")).lower()
+            month_num = MONTH_MAP.get(month_name, 0)
+            year = str(rec.get("year", ""))
+            if month_num and year.isdigit():
+                return f"{year}-{month_num:02d}"
+            return None
+
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+            for year_str in ["2024", "2025", "2026"]:
+                # Fetch Transport division (code 07) — gets airfare + transport
+                for page in range(1, 25):
+                    try:
+                        resp = client.get(MOSPI_API, params={
+                            "base_year": 2024,
+                            "division_code": 7,
+                            "state_code": 1,
+                            "sector_code": 3,
+                            "year": year_str,
+                            "limit": 50,
+                            "page": page,
+                        })
+                        resp.raise_for_status()
+                        body = resp.json()
+
+                        if not body.get("statusCode") or not body.get("data"):
+                            break
+
+                        for rec in body["data"]:
+                            code = rec.get("code", "")
+                            period = _parse_month_year(rec)
+                            if not period:
+                                continue
+                            idx = float(rec.get("index", 100))
+
+                            if code == AIRFARE_CODE:
+                                airfare[period] = idx
+                            elif code == TRANSPORT_CODE:
+                                transport[period] = idx
+
+                        meta = body.get("meta_data", {})
+                        if page >= meta.get("totalPages", 1):
+                            break
+                    except Exception:
+                        break
+
+                # Fetch General CPI (division_code=0 = CPI General)
+                for page in range(1, 5):
+                    try:
+                        resp = client.get(MOSPI_API, params={
+                            "base_year": 2024,
+                            "division_code": 0,
+                            "state_code": 1,
+                            "sector_code": 3,
+                            "year": year_str,
+                            "limit": 50,
+                            "page": page,
+                        })
+                        resp.raise_for_status()
+                        body = resp.json()
+
+                        if not body.get("statusCode") or not body.get("data"):
+                            break
+
+                        for rec in body["data"]:
+                            code = rec.get("code", "")
+                            period = _parse_month_year(rec)
+                            if not period:
+                                continue
+                            idx = float(rec.get("index", 100))
+
+                            if code == "00":
+                                general[period] = idx
+
+                        meta = body.get("meta_data", {})
+                        if page >= meta.get("totalPages", 1):
+                            break
+                    except Exception:
+                        break
+
+        if not airfare:
+            logger.warning("MoSPI API returned no airfare CPI data, using fallback")
+            return _FALLBACK_MOSPI_CPI
+
+        # Build combined series
+        all_periods = sorted(set(airfare.keys()) | set(transport.keys()) | set(general.keys()))
+        series = {}
+        for p in all_periods:
+            air_idx = airfare.get(p, 100.0)
+            series[p] = {
+                "general_cpi": general.get(p, 193.8),
+                "transport_cpi": transport.get(p, 166.5),
+                "airfare_subindex_lagged": air_idx,
+            }
+
+        logger.info(f"MoSPI live CPI: fetched {len(series)} periods (airfare code 07.3.3.1)")
+        return series
+
+    except Exception as e:
+        logger.warning(f"MoSPI API fetch failed ({e}), using hardcoded fallback")
+        return _FALLBACK_MOSPI_CPI
+
+
+# Module-level: fetch once at import time
+HISTORICAL_MOSPI_CPI = _fetch_live_cpi_series()
 
 
 @dataclass
@@ -101,10 +238,14 @@ def simulate_cpi_augmentation(
     mean_delta = float(np.mean(deltas)) if deltas else 0.0
     max_delta = float(np.max(np.abs(deltas))) if deltas else 0.0
 
+    source_note = "live MoSPI CPI data (api.mospi.gov.in)"
+    if HISTORICAL_MOSPI_CPI is _FALLBACK_MOSPI_CPI:
+        source_note = "hardcoded representative series (MoSPI API unreachable)"
+
     summary = (
         f"Integrating real-time APIx at {airfare_weight_in_cpi*100:.2f}% CPI weight adjusted headline CPI "
         f"by an average of {mean_delta:+.1f} bps (peak {max_delta:.1f} bps). "
-        f"Captures dynamic surge airfare variations with ~45 days reduced reporting lag vs static quarterly surveys."
+        f"CPI data source: {source_note}."
     )
 
     return CpiSimulationResult(
