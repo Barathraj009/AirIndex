@@ -21,6 +21,23 @@ from app.services.data_processing import run_pipeline
 
 ADAPTER_REGISTRY = {}
 
+# data_sources.last_failure_reason is VARCHAR(255); keep long adapters
+# (e.g. Playwright tracebacks) from overflowing the column and turning a
+# graceful SOURCE_UNAVAILABLE into a hard FAILED run.
+_MAX_FAILURE_REASON_LEN = 255
+_MAX_ERROR_MESSAGE_LEN = 2000
+
+
+def _clip(text, limit):
+    if text is None:
+        return None
+    text = str(text)
+    if len(text) <= limit:
+        return text
+    suffix = "…[truncated]"
+    keep = max(0, limit - len(suffix))
+    return text[:keep] + suffix
+
 
 def _adapter_registry():
     # Late import so this module stays importable in offline/test contexts
@@ -80,12 +97,12 @@ def collect_from_sources(db: Session, source_names: list[str] | None = None,
             raw_df, err = adapter.run(req)
 
             if raw_df is None:
-                source.last_failure_reason = err
+                source.last_failure_reason = _clip(err, _MAX_FAILURE_REASON_LEN)
                 run.status = "SOURCE_UNAVAILABLE"
-                run.error_message = err
+                run.error_message = _clip(err, _MAX_ERROR_MESSAGE_LEN)
                 run.completed_at = datetime.now(timezone.utc)
                 db.commit()
-                results.append({"source": source.name, "status": run.status, "detail": err})
+                results.append({"source": source.name, "status": run.status, "detail": _clip(err, 300)})
                 continue
 
             clean_df, report = run_pipeline(raw_df, source=source.name, source_type=source.source_type)
@@ -119,9 +136,14 @@ def collect_from_sources(db: Session, source_names: list[str] | None = None,
         except Exception as e:  # noqa: BLE001 - DB/adapter bugs must degrade to FAILED, never 500.
             db.rollback()
             run.status = "FAILED"
-            run.error_message = f"{type(e).__name__}: {e}"
+            run.error_message = _clip(f"{type(e).__name__}: {e}", _MAX_ERROR_MESSAGE_LEN)
             run.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            results.append({"source": source.name, "status": run.status, "detail": run.error_message})
+            try:
+                db.commit()
+            except Exception as commit_err:  # noqa: BLE001 - a failed commit must never raise outward
+                db.rollback()
+                run.error_message = _clip(
+                    f"{type(e).__name__}: {e} (persist error: {commit_err})", _MAX_ERROR_MESSAGE_LEN)
+            results.append({"source": source.name, "status": run.status, "detail": _clip(run.error_message, 300)})
 
     return results

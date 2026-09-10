@@ -60,9 +60,7 @@ _GOOGLE_FLIGHTS_SEARCH_URL = (
 
 _RATE_LIMIT_SECONDS = 3
 
-_PLAYWRIGHT_BROWSERS_PATH = os.environ.get(
-    "PLAYWRIGHT_BROWSERS_PATH", "E:\\playwright-browsers"
-)
+_PLAYWRIGHT_BROWSERS_PATH = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +109,10 @@ class MetasearchAdapter(BaseSourceAdapter):
         all_rows: list[dict] = []
         collection_ts = datetime.now()
 
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = _PLAYWRIGHT_BROWSERS_PATH
+        if _PLAYWRIGHT_BROWSERS_PATH is not None:
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = _PLAYWRIGHT_BROWSERS_PATH
+        else:
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(
