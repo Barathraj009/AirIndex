@@ -49,9 +49,11 @@ def run_walk():
                 if r.status >= 400 else None)
 
         page.goto(f"{BASE}/login", wait_until="networkidle")
-        page.locator("input").nth(0).fill("admin@airindex.gov.in")
-        page.locator("input").nth(1).fill("change-me-immediately")
-        page.locator("button[type='submit'], form button").first.click()
+        page.locator("input#email").fill("admin@airindex.gov.in")
+        page.locator("button[type='submit']").click()
+        page.wait_for_selector("input#password", state="visible", timeout=5000)
+        page.locator("input#password").fill("change-me-immediately")
+        page.locator("button[type='submit']").click()
         page.wait_for_timeout(3500)
 
         if page.url.rstrip("/").endswith("/login"):
