@@ -34,6 +34,23 @@ DEFAULT_TRANSPORT_WEIGHT = 0.0859   # 8.59%
 DEFAULT_AIRFARE_IN_CPI_WEIGHT = 0.0020  # 0.20% of General CPI
 
 
+def _buffered_ssl_context() -> "ssl.SSLContext":
+    """SSL context tolerant of MoSPI's legacy TLS renegotiation.
+
+    api.mospi.gov.in serves TLS with legacy renegotiation that modern
+    OpenSSL rejects (UNSAFE_LEGACY_RENEGOTIATION_DISABLED).
+    Setting SSL_OP_LEGACY_SERVER_CONNECT (0x4) enables the connection.
+    """
+    import ssl
+
+    ctx = ssl.create_default_context()
+    try:
+        ctx.options |= 0x4  # SSL_OP_LEGACY_SERVER_CONNECT
+    except (ValueError, OSError):
+        pass
+    return ctx
+
+
 def _fetch_live_cpi_series() -> Dict[str, Dict]:
     """Attempt to fetch real CPI data from MoSPI API.
 
@@ -67,7 +84,7 @@ def _fetch_live_cpi_series() -> Dict[str, Dict]:
                 return f"{year}-{month_num:02d}"
             return None
 
-        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=15.0, follow_redirects=True, verify=_buffered_ssl_context()) as client:
             for year_str in ["2024", "2025", "2026"]:
                 # Fetch Transport division (code 07) — gets airfare + transport
                 for page in range(1, 25):
@@ -128,9 +145,9 @@ def _fetch_live_cpi_series() -> Dict[str, Dict]:
                             period = _parse_month_year(rec)
                             if not period:
                                 continue
-                            idx = float(rec.get("index", 100))
+                            idx = float(rec.get("index", 100) or 100)
 
-                            if code == "00":
+                            if code in ("00", "", None):
                                 general[period] = idx
 
                         meta = body.get("meta_data", {})

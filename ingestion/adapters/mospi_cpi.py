@@ -16,6 +16,7 @@ API: https://api.mospi.gov.in/api/cpi/getCPIData
 from __future__ import annotations
 
 import logging
+import ssl
 from datetime import date, datetime, timezone
 from typing import Optional, List, Dict
 
@@ -24,6 +25,21 @@ import httpx
 logger = logging.getLogger(__name__)
 
 MOSPI_API = "https://api.mospi.gov.in/api/cpi/getCPIData"
+
+
+def _mospi_ssl_context() -> ssl.SSLContext:
+    """SSL context that tolerates MoSPI's legacy TLS renegotiation.
+
+    api.mospi.gov.in serves TLS with legacy renegotiation that Python's
+    OpenSSL rejects by default (UNSAFE_LEGACY_RENEGOTIATION_DISABLED).
+    Setting SSL_OP_LEGACY_SERVER_CONNECT (0x4) allows the connection.
+    """
+    ctx = ssl.create_default_context()
+    try:
+        ctx.options |= 0x4  # SSL_OP_LEGACY_SERVER_CONNECT
+    except (ValueError, OSError):
+        pass
+    return ctx
 
 # CPI codes
 AIRFARE_CODE = "07.3.3.1"          # Passenger transport by air, domestic
@@ -58,7 +74,7 @@ class MospiCpiAirfareFetcher:
         transport = {}
         general = {}
 
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with httpx.Client(timeout=self.timeout, follow_redirects=True, verify=_mospi_ssl_context()) as client:
             for year_str in years:
                 # Fetch Transport division (code 07) — contains airfare
                 self._fetch_division(client, year_str, 7, airfare, transport)
@@ -124,13 +140,17 @@ class MospiCpiAirfareFetcher:
                     if not period:
                         continue
 
-                    idx = float(rec.get("index", 100))
+                    idx = float(rec.get("index", 100) or 100)
 
                     if code == AIRFARE_CODE:
                         target_dict[period] = idx
                     elif code == TRANSPORT_CODE and secondary_dict is not None:
                         secondary_dict[period] = idx
                     elif code == GENERAL_CODE:
+                        target_dict[period] = idx
+                    elif division_code == 0 and code in ("", None):
+                        # General CPI (all items) records come back with an
+                        # empty code when queried at division_code=0.
                         target_dict[period] = idx
 
                 meta = body.get("meta_data", {})

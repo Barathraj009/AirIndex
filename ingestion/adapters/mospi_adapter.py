@@ -21,6 +21,7 @@ Also fetches related transport CPI components for context:
 from __future__ import annotations
 
 import logging
+import ssl
 from datetime import date, datetime
 from typing import Optional
 
@@ -32,6 +33,16 @@ from ingestion.adapters.base import BaseSourceAdapter, CollectionRequest, Source
 logger = logging.getLogger(__name__)
 
 MOSPI_API_BASE = "https://api.mospi.gov.in/api/cpi/getCPIData"
+
+
+def _mospi_ssl_context() -> ssl.SSLContext:
+    """SSL context tolerant of MoSPI's legacy TLS renegotiation."""
+    ctx = ssl.create_default_context()
+    try:
+        ctx.options |= 0x4  # SSL_OP_LEGACY_SERVER_CONNECT
+    except (ValueError, OSError):
+        pass
+    return ctx
 
 # CPI codes we care about — these map to real MoSPI published data
 AIRFARE_CODE = "07.3.3.1"          # Passenger transport by air, domestic
@@ -78,7 +89,7 @@ class MospiCpiAdapter(BaseSourceAdapter):
             # Fetch multiple years of data for time series
             years = ["2025", "2026"]
 
-            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+with httpx.Client(timeout=30.0, follow_redirects=True, verify=_mospi_ssl_context()) as client:
                 for year_str in years:
                     for page in range(1, 25):
                         try:
@@ -218,7 +229,7 @@ def fetch_mospi_cpi_series() -> dict:
     series = {}
     years = ["2024", "2025", "2026"]
 
-    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+    with httpx.Client(timeout=30.0, follow_redirects=True, verify=_mospi_ssl_context()) as client:
         for year_str in years:
             for page in range(1, 25):
                 try:
