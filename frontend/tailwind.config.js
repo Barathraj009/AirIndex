@@ -4,15 +4,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        // On-dark text tokens (keep names so existing classes still work)
-        ink: '#e2e8f0',
-        muted: '#94a3b8',
-        // App surfaces
-        base: '#0b1220',
-        surface: '#0f172a',
-        raised: '#131c2e',
-        line: '#1e293b',
-        lineSoft: '#182233',
+        // On-light text tokens (keep names so existing classes still work)
+        ink: '#0f172a',
+        muted: '#64748b',
+        // App surfaces (clean white theme)
+        base: '#f8fafc',
+        surface: '#ffffff',
+        raised: '#ffffff',
+        line: '#e2e8f0',
+        lineSoft: '#f1f5f9',
         // Brand (aviation sky)
         brand: {
           50: '#eef7ff',
@@ -41,8 +41,8 @@ export default {
         ],
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(84,177,255,0.15), 0 8px 40px -12px rgba(43,143,255,0.35)',
-        card: '0 1px 0 0 rgba(255,255,255,0.03) inset, 0 10px 30px -12px rgba(0,0,0,0.6)',
+        glow: '0 0 0 1px rgba(20,113,232,0.10), 0 8px 40px -12px rgba(43,143,255,0.30)',
+        card: '0 1px 2px rgba(15,23,42,0.05), 0 10px 30px -12px rgba(15,23,42,0.12)',
       },
       borderRadius: {
         xl2: '1.25rem',
@@ -50,7 +50,7 @@ export default {
       backgroundImage: {
         'brand-gradient': 'linear-gradient(135deg, #1471e8 0%, #2b8fff 45%, #54b1ff 100%)',
         'login-glow':
-          'radial-gradient(1000px 500px at 15% -10%, rgba(43,143,255,0.22), transparent 60%), radial-gradient(800px 400px at 90% 110%, rgba(84,177,255,0.12), transparent 60%)',
+          'radial-gradient(900px 460px at 15% -10%, rgba(43,143,255,0.12), transparent 60%), radial-gradient(700px 380px at 90% 110%, rgba(84,177,255,0.10), transparent 60%)',
       },
       keyframes: {
         'fade-in-up': {

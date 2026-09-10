@@ -37,7 +37,7 @@ export default function Admin() {
 }
 
 const inputCls =
-  'w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-ink placeholder:text-slate-600 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/50'
+  'w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/50'
 
 function RoutesTab() {
   const routesQuery = useApiQuery<Route[]>('/routes')
@@ -84,13 +84,13 @@ function RoutesTab() {
         </p>
         <button
           onClick={handleCalibrateDGCA}
-          className="text-xs rounded-lg bg-brand-500/15 border border-brand-500/40 px-3 py-1.5 font-semibold text-brand-200 transition-colors hover:bg-brand-500/25"
+          className="text-xs rounded-lg bg-brand-500/10 border border-brand-500/40 px-3 py-1.5 font-semibold text-brand-700 transition-colors hover:bg-brand-500/20"
         >
           {calibrateStatus ? calibrateStatus : 'Calibrate with DGCA'}
         </button>
       </div>
       {calibrateStatus && (
-        <p className="mb-4 rounded-lg border border-brand-500/25 bg-brand-500/10 px-3 py-2 text-xs text-brand-200">{calibrateStatus}</p>
+        <p className="mb-4 rounded-lg border border-brand-500/25 bg-brand-500/10 px-3 py-2 text-xs text-brand-700">{calibrateStatus}</p>
       )}
       {routesQuery.loading && <LoadingState />}
       {routesQuery.error && <ErrorState message={routesQuery.error} onRetry={routesQuery.refetch} />}
@@ -98,7 +98,7 @@ function RoutesTab() {
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-muted border-b border-line bg-raised/60">
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Route</th>
                 <th className="py-2.5 px-3 font-medium">Tier</th>
                 <th className="py-2.5 px-3 text-right font-medium">Weight</th>
@@ -108,9 +108,9 @@ function RoutesTab() {
             </thead>
             <tbody>
               {routesQuery.data.map((r) => (
-                <tr key={r.id} className="border-b border-lineSoft hover:bg-raised/40 transition-colors">
+                <tr key={r.id} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
                   <td className="py-2.5 px-3 font-medium text-ink">
-                    <span className="rounded-md bg-brand-500/10 px-2 py-0.5 font-mono text-xs text-brand-300">
+                    <span className="rounded-md bg-brand-500/10 px-2 py-0.5 font-mono text-xs text-brand-700">
                       {r.origin}-{r.destination}
                     </span>
                   </td>
@@ -131,15 +131,15 @@ function RoutesTab() {
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${r.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-400'}`}>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${r.active ? 'bg-emerald-500/10 text-emerald-700' : 'bg-slate-500/10 text-slate-500'}`}>
                       {r.active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="py-2.5 px-3 text-right">
                     {editingRouteId === r.id ? (
                       <div className="space-x-2 text-xs">
-                        <button onClick={() => saveWeight(r.id)} className="font-semibold text-brand-400 hover:text-brand-300">Save</button>
-                        <button onClick={() => setEditingRouteId(null)} className="text-muted hover:text-slate-300">Cancel</button>
+                        <button onClick={() => saveWeight(r.id)} className="font-semibold text-brand-600 hover:text-brand-700">Save</button>
+                        <button onClick={() => setEditingRouteId(null)} className="text-muted hover:text-slate-700">Cancel</button>
                       </div>
                     ) : (
                       <button
@@ -148,7 +148,7 @@ function RoutesTab() {
                           setDraftWeight(String(r.weight))
                           setRouteError(null)
                         }}
-                        className="text-xs font-medium text-brand-400 hover:text-brand-300 hover:underline"
+                        className="text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"
                       >
                         Edit Weight
                       </button>
@@ -160,7 +160,7 @@ function RoutesTab() {
           </table>
         </div>
       )}
-      {routeError && <p className="mt-2 text-xs text-rose-400">{routeError}</p>}
+      {routeError && <p className="mt-2 text-xs text-rose-600">{routeError}</p>}
     </Card>
   )
 }
@@ -184,26 +184,26 @@ function SourcesTab() {
       <p className="text-xs text-muted pb-4">
         Manage active scraping adapters and public data collection endpoints.
       </p>
-      {error && <p className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+      {error && <p className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700">{error}</p>}
       {sourcesQuery.loading && <LoadingState />}
       {sourcesQuery.error && <ErrorState message={sourcesQuery.error} onRetry={sourcesQuery.refetch} />}
       {sourcesQuery.data && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {sourcesQuery.data.map((src) => (
-            <div key={src.id} className="flex flex-col justify-between rounded-xl border border-line bg-raised p-4 shadow-card">
+            <div key={src.id} className="flex flex-col justify-between rounded-xl border border-line bg-white p-4 shadow-card">
               <div>
                 <div className="mb-2 flex items-start justify-between">
                   <h4 className="text-sm font-semibold text-ink">{src.name}</h4>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${src.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-400'}`}>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${src.active ? 'bg-emerald-500/10 text-emerald-700' : 'bg-slate-500/10 text-slate-500'}`}>
                     {src.active ? 'ACTIVE' : 'DISABLED'}
                   </span>
                 </div>
-                <p className="mb-2 text-xs text-muted">Type: <span className="font-mono text-slate-300">{src.source_type}</span></p>
+                <p className="mb-2 text-xs text-muted">Type: <span className="font-mono text-slate-600">{src.source_type}</span></p>
                 {src.last_success_at && (
                   <p className="text-xs text-muted">Last success: {new Date(src.last_success_at).toLocaleString()}</p>
                 )}
                 {src.last_failure_reason && (
-                  <p className="mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 p-1.5 text-xs text-amber-200">
+                  <p className="mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 p-1.5 text-xs text-amber-700">
                     {src.last_failure_reason}
                   </p>
                 )}
@@ -213,8 +213,8 @@ function SourcesTab() {
                   onClick={() => toggleSource(src.id)}
                   className={`text-xs rounded-lg px-3 py-1.5 font-medium transition-colors ${
                     src.active
-                      ? 'border border-rose-500/40 text-rose-300 hover:bg-rose-500/10'
-                      : 'border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10'
+                      ? 'border border-rose-500/40 text-rose-600 hover:bg-rose-500/10'
+                      : 'border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10'
                   }`}
                 >
                   {src.active ? 'Disable' : 'Enable'}
@@ -281,14 +281,14 @@ function UsersTab() {
         <p className="text-xs text-muted">ADMIN, ANALYST, VIEWER roles.</p>
         <button
           onClick={() => setShowNewUser(!showNewUser)}
-          className="text-xs rounded-lg bg-brand-500/15 border border-brand-500/40 px-3 py-1.5 font-semibold text-brand-200 transition-colors hover:bg-brand-500/25"
+          className="text-xs rounded-lg bg-brand-500/10 border border-brand-500/40 px-3 py-1.5 font-semibold text-brand-700 transition-colors hover:bg-brand-500/20"
         >
           {showNewUser ? 'Cancel' : '+ Add User'}
         </button>
       </div>
 
       {showNewUser && (
-        <form onSubmit={handleCreateUser} className="mb-6 rounded-xl border border-line bg-raised p-4 text-sm">
+        <form onSubmit={handleCreateUser} className="mb-6 rounded-xl border border-line bg-white p-4 text-sm">
           <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
             <label className="flex flex-col gap-1.5">
               <span className="text-xs text-muted">Email</span>
@@ -307,13 +307,13 @@ function UsersTab() {
               </select>
             </label>
           </div>
-          {userFormError && <p className="mb-2 text-xs text-rose-400">{userFormError}</p>}
-          {userFormSuccess && <p className="mb-2 text-xs text-emerald-400">{userFormSuccess}</p>}
+          {userFormError && <p className="mb-2 text-xs text-rose-600">{userFormError}</p>}
+          {userFormSuccess && <p className="mb-2 text-xs text-emerald-600">{userFormSuccess}</p>}
           <button type="submit" className="rounded-lg bg-brand-gradient px-4 py-1.5 text-xs font-semibold text-white">Save User</button>
         </form>
       )}
 
-      {userFormError && !showNewUser && <p className="mb-3 text-xs text-rose-400">{userFormError}</p>}
+      {userFormError && !showNewUser && <p className="mb-3 text-xs text-rose-600">{userFormError}</p>}
 
       {usersQuery.loading && <LoadingState />}
       {usersQuery.error && <ErrorState message={usersQuery.error} onRetry={usersQuery.refetch} />}
@@ -321,7 +321,7 @@ function UsersTab() {
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-muted border-b border-line bg-raised/60">
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Email</th>
                 <th className="py-2.5 px-3 font-medium">Role</th>
                 <th className="py-2.5 px-3 text-center font-medium">Status</th>
@@ -330,13 +330,13 @@ function UsersTab() {
             </thead>
             <tbody>
               {usersQuery.data.map((u) => (
-                <tr key={u.id} className="border-b border-lineSoft hover:bg-raised/40 transition-colors">
+                <tr key={u.id} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
                   <td className="py-2.5 px-3 font-medium text-ink">{u.email}</td>
                   <td className="py-2.5 px-3">
                     <select
                       value={u.role}
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                      className="rounded-lg border border-line bg-raised px-2 py-1 text-xs font-medium text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/60"
+                      className="rounded-lg border border-line bg-white px-2 py-1 text-xs font-medium text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/60"
                     >
                       <option value="ADMIN">ADMIN</option>
                       <option value="ANALYST">ANALYST</option>
@@ -344,14 +344,14 @@ function UsersTab() {
                     </select>
                   </td>
                   <td className="py-2.5 px-3 text-center">
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${u.is_active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${u.is_active ? 'bg-emerald-500/10 text-emerald-700' : 'bg-rose-500/10 text-rose-700'}`}>
                       {u.is_active ? 'Active' : 'Disabled'}
                     </span>
                   </td>
                   <td className="py-2.5 px-3 text-right">
                     <button
                       onClick={() => toggleUserActive(u.id)}
-                      className="text-xs underline text-slate-400 hover:text-slate-200"
+                      className="text-xs underline text-slate-500 hover:text-slate-700"
                     >
                       {u.is_active ? 'Deactivate' : 'Activate'}
                     </button>
@@ -403,14 +403,14 @@ function ConfigTab() {
         <p className="text-xs text-muted max-w-xl">Configure active Laspeyres baseline parameters.</p>
         <button
           onClick={() => setShowNewConfig(!showNewConfig)}
-          className="text-xs rounded-lg bg-brand-500/15 border border-brand-500/40 px-3 py-1.5 font-semibold text-brand-200 transition-colors hover:bg-brand-500/25"
+          className="text-xs rounded-lg bg-brand-500/10 border border-brand-500/40 px-3 py-1.5 font-semibold text-brand-700 transition-colors hover:bg-brand-500/20"
         >
           {showNewConfig ? 'Cancel' : '+ New Config'}
         </button>
       </div>
 
       {showNewConfig && (
-        <form onSubmit={handleCreateConfig} className="mb-6 rounded-xl border border-line bg-raised p-4 text-sm">
+        <form onSubmit={handleCreateConfig} className="mb-6 rounded-xl border border-line bg-white p-4 text-sm">
           <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
             <label className="flex flex-col gap-1.5">
               <span className="text-xs text-muted">Base Period (YYYY-MM)</span>
@@ -420,7 +420,7 @@ function ConfigTab() {
               <span className="text-xs text-muted">Include Suspicious</span>
               <div className="flex items-center gap-2 pt-2">
                 <input type="checkbox" checked={configIncludeSuspicious} onChange={(e) => setConfigIncludeSuspicious(e.target.checked)} className="rounded" />
-                <span className="text-xs text-slate-300">Include SUSPICIOUS rows</span>
+                <span className="text-xs text-slate-600">Include SUSPICIOUS rows</span>
               </div>
             </label>
             <label className="flex flex-col gap-1.5">
@@ -428,17 +428,17 @@ function ConfigTab() {
               <input type="text" value={configNotes} onChange={(e) => setConfigNotes(e.target.value)} placeholder="e.g. Q2 2026 baseline" className={inputCls} />
             </label>
           </div>
-          {configError && <p className="mb-2 text-xs text-rose-400">{configError}</p>}
-          {configSuccess && <p className="mb-2 text-xs text-emerald-400">{configSuccess}</p>}
+          {configError && <p className="mb-2 text-xs text-rose-600">{configError}</p>}
+          {configSuccess && <p className="mb-2 text-xs text-emerald-600">{configSuccess}</p>}
           <button type="submit" className="rounded-lg bg-brand-gradient px-4 py-1.5 text-xs font-semibold text-white">Activate</button>
         </form>
       )}
 
       {activeConfigQuery.data && (
         <div className="mb-6 rounded-xl border border-brand-500/25 bg-brand-500/10 p-4 text-xs">
-          <h4 className="mb-2 text-sm font-bold text-brand-200">Active Configuration</h4>
-          <div className="grid grid-cols-2 gap-3 text-slate-300 md:grid-cols-4">
-            <div><span className="text-muted">Base: </span><strong className="font-mono text-brand-200">{activeConfigQuery.data.base_period}</strong></div>
+          <h4 className="mb-2 text-sm font-bold text-brand-700">Active Configuration</h4>
+          <div className="grid grid-cols-2 gap-3 text-slate-600 md:grid-cols-4">
+            <div><span className="text-muted">Base: </span><strong className="font-mono text-brand-700">{activeConfigQuery.data.base_period}</strong></div>
             <div><span className="text-muted">Methodology: </span><strong>{activeConfigQuery.data.methodology_version}</strong></div>
             <div><span className="text-muted">Created by: </span><strong>{activeConfigQuery.data.created_by ?? 'System'}</strong></div>
             <div><span className="text-muted">Suspicious: </span><strong>{activeConfigQuery.data.include_suspicious ? 'Included' : 'Excluded'}</strong></div>
@@ -451,7 +451,7 @@ function ConfigTab() {
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-muted border-b border-line bg-raised/60">
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Deployed</th>
                 <th className="py-2.5 px-3 font-medium">Base Period</th>
                 <th className="py-2.5 px-3 font-medium">Author</th>
@@ -461,12 +461,12 @@ function ConfigTab() {
             </thead>
             <tbody>
               {configHistoryQuery.data.map((c) => (
-                <tr key={c.id} className="border-b border-lineSoft hover:bg-raised/40">
-                  <td className="py-2.5 px-3 text-slate-300">{new Date(c.created_at).toLocaleString()}</td>
+                <tr key={c.id} className="border-b border-lineSoft hover:bg-slate-50">
+                  <td className="py-2.5 px-3 text-slate-600">{new Date(c.created_at).toLocaleString()}</td>
                   <td className="py-2.5 px-3 font-mono font-semibold text-ink">{c.base_period}</td>
-                  <td className="py-2.5 px-3 text-slate-300">{c.created_by ?? 'seed'}</td>
+                  <td className="py-2.5 px-3 text-slate-600">{c.created_by ?? 'seed'}</td>
                   <td className="py-2.5 px-3">
-                    <span className={`px-2 py-0.5 rounded-full font-bold ${c.is_active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-400'}`}>
+                    <span className={`px-2 py-0.5 rounded-full font-bold ${c.is_active ? 'bg-emerald-500/10 text-emerald-700' : 'bg-slate-500/10 text-slate-500'}`}>
                       {c.is_active ? 'ACTIVE' : 'SUPERSEDED'}
                     </span>
                   </td>
@@ -493,7 +493,7 @@ function AuditTab() {
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-muted border-b border-line bg-raised/60">
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Timestamp</th>
                 <th className="py-2.5 px-3 font-medium">User</th>
                 <th className="py-2.5 px-3 font-medium">Action</th>
@@ -503,14 +503,14 @@ function AuditTab() {
             </thead>
             <tbody>
               {auditQuery.data.map((entry) => (
-                <tr key={entry.id} className="border-b border-lineSoft hover:bg-raised/40">
-                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-300">{new Date(entry.timestamp).toLocaleString()}</td>
+                <tr key={entry.id} className="border-b border-lineSoft hover:bg-slate-50">
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">{new Date(entry.timestamp).toLocaleString()}</td>
                   <td className="py-2.5 px-3 font-medium text-ink">{entry.user_email ?? 'System'}</td>
-                  <td className="py-2.5 px-3 font-mono text-[11px] font-semibold text-brand-300">{entry.action}</td>
+                  <td className="py-2.5 px-3 font-mono text-[11px] font-semibold text-brand-700">{entry.action}</td>
                   <td className="py-2.5 px-3 text-muted">
                     {entry.entity_type ? `${entry.entity_type}${entry.entity_id ? ` #${entry.entity_id}` : ''}` : '\u2014'}
                   </td>
-                  <td className="py-2.5 px-3 max-w-xs truncate font-mono text-[10px] text-slate-500">
+                  <td className="py-2.5 px-3 max-w-xs truncate font-mono text-[10px] text-slate-400">
                     {entry.details ? JSON.stringify(entry.details) : '\u2014'}
                   </td>
                 </tr>

@@ -28,7 +28,7 @@ export function StatCard({
   accent?: boolean
 }) {
   const toneClass =
-    tone === 'up' ? 'text-rose-400' : tone === 'down' ? 'text-emerald-400' : accent ? 'text-white' : 'text-ink'
+    tone === 'up' ? 'text-rose-500' : tone === 'down' ? 'text-emerald-600' : accent ? 'text-brand-600' : 'text-ink'
   return (
     <div
       className={`relative overflow-hidden rounded-xl border border-line bg-surface p-4 shadow-card transition-colors ${
@@ -42,7 +42,7 @@ export function StatCard({
           <div className={`mt-2 text-[26px] font-bold leading-tight ${toneClass}`}>{value}</div>
           {sub && <div className="mt-1.5 text-xs text-muted">{sub}</div>}
         </div>
-        {icon && <div className="text-brand-400 opacity-80">{icon}</div>}
+        {icon && <div className="text-brand-600 opacity-90">{icon}</div>}
       </div>
     </div>
   )
@@ -63,14 +63,14 @@ export function Card({ title, children, className = '', action }: { title?: Reac
 }
 
 const SOURCE_LABEL_STYLES: Record<string, string> = {
-  LIVE_SCRAPE: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30',
-  PUBLIC_DATASET: 'bg-brand-500/15 text-brand-300 border border-brand-500/30',
-  DEMO_SIMULATED: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
-  SOURCE_UNAVAILABLE: 'bg-rose-500/15 text-rose-300 border border-rose-500/30',
+  LIVE_SCRAPE: 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30',
+  PUBLIC_DATASET: 'bg-brand-500/10 text-brand-700 border border-brand-500/30',
+  DEMO_SIMULATED: 'bg-amber-500/10 text-amber-700 border border-amber-500/30',
+  SOURCE_UNAVAILABLE: 'bg-rose-500/10 text-rose-700 border border-rose-500/30',
 }
 
 export function SourceBadge({ sourceType }: { sourceType: string }) {
-  const style = SOURCE_LABEL_STYLES[sourceType] ?? 'bg-slate-500/15 text-slate-300 border border-slate-500/30'
+  const style = SOURCE_LABEL_STYLES[sourceType] ?? 'bg-slate-500/10 text-slate-600 border border-slate-500/30'
   return (
     <span className={`inline-flex items-center gap-1 text-[11px] font-bold tracking-wide px-2.5 py-1 rounded-full ${style}`}>
       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
@@ -80,14 +80,14 @@ export function SourceBadge({ sourceType }: { sourceType: string }) {
 }
 
 const QUALITY_STYLES: Record<string, string> = {
-  VALID: 'bg-emerald-500/15 text-emerald-300',
-  SUSPICIOUS: 'bg-amber-500/15 text-amber-300',
-  INVALID: 'bg-rose-500/15 text-rose-300',
-  UNAVAILABLE: 'bg-slate-500/20 text-slate-300',
+  VALID: 'bg-emerald-500/10 text-emerald-700',
+  SUSPICIOUS: 'bg-amber-500/10 text-amber-700',
+  INVALID: 'bg-rose-500/10 text-rose-700',
+  UNAVAILABLE: 'bg-slate-500/10 text-slate-500',
 }
 
 export function QualityBadge({ status }: { status: string }) {
-  const style = QUALITY_STYLES[status] ?? 'bg-slate-500/15 text-slate-300'
+  const style = QUALITY_STYLES[status] ?? 'bg-slate-500/10 text-slate-500'
   return <span className={`inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full ${style}`}>{status}</span>
 }
 
@@ -112,11 +112,11 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="flex items-start justify-between gap-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4">
-      <div className="text-sm text-rose-200">{message}</div>
+      <div className="text-sm text-rose-700">{message}</div>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="shrink-0 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-500/20 transition-colors"
+          className="shrink-0 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-500/10 transition-colors"
         >
           Retry
         </button>
@@ -143,7 +143,7 @@ export function TrendPill({ value, suffix = '%' }: { value: number | null | unde
     return <span className="text-xs text-muted">—</span>
   }
   const up = value >= 0
-  const cls = up ? 'text-rose-400 bg-rose-500/10 border-rose-500/25' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25'
+  const cls = up ? 'text-rose-600 bg-rose-500/10 border-rose-500/25' : 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25'
   return (
     <span className={`inline-flex items-center gap-0.5 rounded-full border px-2 py-0.5 text-xs font-bold tabular-nums ${cls}`}>
       {up ? '+' : ''}

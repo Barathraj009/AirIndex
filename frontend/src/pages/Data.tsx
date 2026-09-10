@@ -71,7 +71,7 @@ function ObservationsTab() {
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-muted border-b border-line bg-raised/60">
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Period</th>
                 <th className="py-2.5 px-3 text-right font-medium">Airfare CPI</th>
                 <th className="py-2.5 px-3 text-right font-medium">Transport CPI</th>
@@ -82,7 +82,7 @@ function ObservationsTab() {
             </thead>
             <tbody>
               {rows.map((p) => (
-                <tr key={p.period} className="border-b border-lineSoft hover:bg-raised/40 transition-colors">
+                <tr key={p.period} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
                   <td className="py-2 px-3 font-medium text-ink">{p.period}</td>
                   <td className="py-2 px-3 text-right tabular-nums">{p.airfare_index.toFixed(2)}</td>
                   <td className="py-2 px-3 text-right tabular-nums text-muted">
@@ -124,7 +124,7 @@ function SourceTab() {
         <div className="divide-y divide-lineSoft">
           <InfoRow label="Publisher">Ministry of Statistics and Programme Implementation (MoSPI)</InfoRow>
           <InfoRow label="Portal">
-            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:underline">
+            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">
               esankhyiki.mospi.gov.in
             </a>
           </InfoRow>
@@ -142,7 +142,7 @@ function SourceTab() {
           <InfoRow label="Backend">Fetch from api.mospi.gov.in via SSL with legacy TLS support</InfoRow>
           <InfoRow label="Refresh schedule">Daily at 06:00 UTC + on startup</InfoRow>
         </div>
-        <p className="mt-4 rounded-lg border border-brand-500/25 bg-brand-500/10 px-3 py-2.5 text-xs leading-relaxed text-brand-200">
+        <p className="mt-4 rounded-lg border border-brand-500/25 bg-brand-500/10 px-3 py-2.5 text-xs leading-relaxed text-brand-700">
           The APIx platform ingests the official MoSPI Consolidated CPI series for the air transport
           sub-component. No synthetic or scraped fare data is used.
         </p>

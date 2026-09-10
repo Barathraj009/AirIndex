@@ -3,18 +3,18 @@
 @tailwind utilities;
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: #0b1220;
-  color: #e2e8f0;
+  background-color: #f8fafc;
+  color: #0f172a;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Thin scrollbars that match the dark theme */
+/* Thin scrollbars that match the light theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -23,16 +23,16 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #cbd5e1;
   border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #94a3b8;
 }
 
-/* Recharts theming on dark surfaces */
+/* Recharts theming on light surfaces */
 .recharts-cartesian-grid line {
-  stroke: #1e293b;
+  stroke: #e2e8f0;
 }
 .recharts-cartesian-axis-tick text {
   fill: #64748b;
@@ -40,14 +40,15 @@ body {
 }
 .recharts-default-tooltip {
   border-radius: 12px !important;
-  background: #131c2e !important;
-  border: 1px solid #1e293b !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.18);
 }
 .recharts-tooltip-item-name,
 .recharts-tooltip-item-value {
   font-size: 12px;
 }
 .recharts-legend-item-text {
-  color: #cbd5e1 !important;
+  color: #475569 !important;
   font-size: 12px;
 }

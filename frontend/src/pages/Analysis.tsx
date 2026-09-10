@@ -9,7 +9,7 @@ type AnalysisTab = 'trend' | 'inflation' | 'components' | 'routes'
 
 const TABS: AnalysisTab[] = ['trend', 'inflation', 'components', 'routes']
 
-const TOOLTIP_STYLE = { background: '#131c2e', border: '1px solid #1e293b', borderRadius: 12 }
+const TOOLTIP_STYLE = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12 }
 
 export default function Analysis() {
   const [tab, setTab] = useState<AnalysisTab>('trend')
@@ -65,18 +65,18 @@ function TrendTab() {
         <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="gradA" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#54b1ff" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#54b1ff" stopOpacity={0} />
+              <stop offset="0%" stopColor="#1471e8" stopOpacity={0.2} />
+              <stop offset="100%" stopColor="#1471e8" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="period" tickLine={false} axisLine={false} />
           <YAxis domain={['auto', 'auto']} tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#e2e8f0', fontWeight: 600 }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#0f172a', fontWeight: 600 }} />
           <Legend />
-          <Area type="monotone" dataKey="airfare_index" name="Airfare CPI" stroke="#54b1ff" strokeWidth={2.5} fill="url(#gradA)" dot={{ r: 2.5, fill: '#54b1ff' }} activeDot={{ r: 4 }} />
-          <Line type="monotone" dataKey="transport_index" name="Transport CPI" stroke="#38bdf8" strokeOpacity={0.55} strokeWidth={1.5} dot={false} />
-          <Line type="monotone" dataKey="general_index" name="General CPI" stroke="#64748b" strokeWidth={1.5} dot={false} />
+          <Area type="monotone" dataKey="airfare_index" name="Airfare CPI" stroke="#1471e8" strokeWidth={2.5} fill="url(#gradA)" dot={{ r: 2.5, fill: '#1471e8' }} activeDot={{ r: 4 }} />
+          <Line type="monotone" dataKey="transport_index" name="Transport CPI" stroke="#0ea5e9" strokeOpacity={0.55} strokeWidth={1.5} dot={false} />
+          <Line type="monotone" dataKey="general_index" name="General CPI" stroke="#94a3b8" strokeWidth={1.5} dot={false} />
         </AreaChart>
       </ResponsiveContainer>
     </Card>
@@ -125,10 +125,10 @@ function InflationTab() {
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="period" tickLine={false} axisLine={false} />
             <YAxis tickLine={false} axisLine={false} unit="%" />
-            <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#e2e8f0', fontWeight: 600 }} formatter={(v: number) => [`${v.toFixed(2)}%`, 'YoY inflation']} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#0f172a', fontWeight: 600 }} formatter={(v: number) => [`${v.toFixed(2)}%`, 'YoY inflation']} />
             <Bar dataKey="inflation_yoy" radius={[4, 4, 0, 0]}>
               {chart.map((d, i) => (
-                <Cell key={i} fill={d.inflation_yoy >= 0 ? '#fb7185' : '#34d399'} />
+                <Cell key={i} fill={d.inflation_yoy >= 0 ? '#f43f5e' : '#10b981'} />
               ))}
             </Bar>
           </BarChart>
@@ -163,7 +163,7 @@ function ComponentsTab() {
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-muted border-b border-line bg-raised/60">
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Period</th>
                 <th className="py-2.5 px-3 text-right font-medium">Airfare CPI</th>
                 <th className="py-2.5 px-3 text-right font-medium">Transport CPI</th>
@@ -175,7 +175,7 @@ function ComponentsTab() {
               {data.map((p) => {
                 const gap = p.general_index && p.general_index > 0 ? ((p.airfare_index - p.general_index) / p.general_index) * 100 : null
                 return (
-                  <tr key={p.period} className="border-b border-lineSoft hover:bg-raised/40 transition-colors">
+                  <tr key={p.period} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
                     <td className="py-2.5 px-3 font-medium text-ink">{p.period}</td>
                     <td className="py-2.5 px-3 text-right tabular-nums">{p.airfare_index.toFixed(2)}</td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-muted">
@@ -223,7 +223,7 @@ function RoutesTab() {
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-muted border-b border-line bg-raised/60">
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Route</th>
                 <th className="py-2.5 px-3 font-medium">Distance tier</th>
                 <th className="py-2.5 px-3 text-right font-medium">Weight</th>
@@ -232,9 +232,9 @@ function RoutesTab() {
             </thead>
             <tbody>
               {sorted.map((r) => (
-                <tr key={r.id} className="border-b border-lineSoft hover:bg-raised/40 transition-colors">
+                <tr key={r.id} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
                   <td className="py-2.5 px-3 font-medium text-ink">
-                    <span className="rounded-md bg-brand-500/10 px-2 py-0.5 font-mono text-xs text-brand-300">
+                    <span className="rounded-md bg-brand-500/10 px-2 py-0.5 font-mono text-xs text-brand-700">
                       {r.origin}–{r.destination}
                     </span>
                   </td>

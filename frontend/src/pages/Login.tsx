@@ -83,7 +83,7 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5" htmlFor="email">
+                <label className="block text-sm font-medium text-slate-600 mb-1.5" htmlFor="email">
                   Email Address
                 </label>
                 <input
@@ -93,12 +93,12 @@ export default function Login() {
                   autoComplete="username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-lg border border-line bg-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-600 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/50"
+                  className="w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/50"
                   placeholder="you@example.com"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5" htmlFor="password">
+                <label className="block text-sm font-medium text-slate-600 mb-1.5" htmlFor="password">
                   Password
                 </label>
                 <input
@@ -108,12 +108,12 @@ export default function Login() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-line bg-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-600 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/50"
+                  className="w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/50"
                   placeholder="Enter your password"
                 />
               </div>
               {error && (
-                <div className="text-sm text-rose-200 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2.5">
+                <div className="text-sm text-rose-700 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2.5">
                   {error}
                 </div>
               )}
@@ -139,7 +139,7 @@ export default function Login() {
 function Feature({ label, detail, icon }: { label: string; detail: string; icon: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-raised text-brand-400">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-white text-brand-600">
         {icon}
       </div>
       <div>

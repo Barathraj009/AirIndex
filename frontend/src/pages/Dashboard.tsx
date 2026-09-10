@@ -63,22 +63,23 @@ export default function Dashboard() {
       />
 
       {/* Hero index card */}
-      <div className="relative overflow-hidden rounded-2xl border border-brand-700/30 bg-raised shadow-glow animate-fade-in-up">
-        <div className="absolute inset-0 bg-brand-gradient opacity-[0.07]" aria-hidden />
-        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-500/20 blur-3xl" aria-hidden />
+      <div className="relative overflow-hidden rounded-2xl border border-brand-500/25 bg-white shadow-card animate-fade-in-up">
+        <div className="absolute inset-x-0 top-0 h-1 bg-brand-gradient" aria-hidden />
+        <div className="absolute inset-0 bg-brand-gradient opacity-[0.04]" aria-hidden />
+        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-500/10 blur-3xl" aria-hidden />
         <div className="relative flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-brand-300">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-brand-600">
               <Plane size={13} />
               Current Airfare Price Index
             </div>
             <div className="mt-3 flex items-baseline gap-3">
-              <span className="text-5xl font-bold tracking-tight text-white tabular-nums">
+              <span className="text-5xl font-bold tracking-tight text-brand-700 tabular-nums">
                 {data.airfare_index!.toFixed(2)}
               </span>
               <span className="text-sm font-medium text-muted">base 2024 = 100</span>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
               <span className="inline-flex items-center gap-1">
                 <CalendarDays size={12} /> Period {data.period}
               </span>
@@ -93,12 +94,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="shrink-0 rounded-xl border border-line bg-base/50 px-5 py-4 sm:text-right">
+          <div className="shrink-0 rounded-xl border border-line bg-slate-50 px-5 py-4 sm:text-right">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">vs General CPI</div>
-            <div className={`mt-1.5 text-2xl font-bold tabular-nums ${gapVsGeneral !== null && gapVsGeneral > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+            <div className={`mt-1.5 text-2xl font-bold tabular-nums ${gapVsGeneral !== null && gapVsGeneral > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
               {gapVsGeneral !== null ? `${gapVsGeneral >= 0 ? '+' : ''}${gapVsGeneral.toFixed(2)}%` : '—'}
             </div>
-            <div className="mt-1 text-[11px] text-muted">
+            <div className="mt-1 text-[11px] text-slate-500">
               {gapVsGeneral !== null && gapVsGeneral > 0
                 ? 'Airfares rising faster than headline CPI'
                 : 'Airfares tracking near headline CPI'}
@@ -143,25 +144,25 @@ export default function Dashboard() {
             <AreaChart data={trendData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id="gradAirfare" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#54b1ff" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#54b1ff" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#1471e8" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="#1471e8" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="gradGeneral" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#64748b" stopOpacity={0.2} />
-                  <stop offset="100%" stopColor="#64748b" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="#94a3b8" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="period" tickLine={false} axisLine={false} />
               <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} />
               <Tooltip
-                contentStyle={{ background: '#131c2e', border: '1px solid #1e293b', borderRadius: 12 }}
-                labelStyle={{ color: '#e2e8f0', fontWeight: 600 }}
+                contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12 }}
+                labelStyle={{ color: '#0f172a', fontWeight: 600 }}
               />
               <Legend />
-              <Area type="monotone" dataKey="airfare_index" name="Airfare CPI" stroke="#54b1ff" strokeWidth={2.5} fill="url(#gradAirfare)" dot={{ r: 2.5, fill: '#54b1ff' }} activeDot={{ r: 4 }} />
-              <Area type="monotone" dataKey="transport_index" name="Transport CPI" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={1.5} fill="none" dot={false} />
-              <Area type="monotone" dataKey="general_index" name="General CPI" stroke="#64748b" strokeWidth={1.5} fill="url(#gradGeneral)" dot={false} />
+              <Area type="monotone" dataKey="airfare_index" name="Airfare CPI" stroke="#1471e8" strokeWidth={2.5} fill="url(#gradAirfare)" dot={{ r: 2.5, fill: '#1471e8' }} activeDot={{ r: 4 }} />
+              <Area type="monotone" dataKey="transport_index" name="Transport CPI" stroke="#0ea5e9" strokeOpacity={0.6} strokeWidth={1.5} fill="none" dot={false} />
+              <Area type="monotone" dataKey="general_index" name="General CPI" stroke="#94a3b8" strokeWidth={1.5} fill="url(#gradGeneral)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </Card>
@@ -172,7 +173,7 @@ export default function Dashboard() {
         <div className="divide-y divide-lineSoft">
           <InfoRow label="Source">Ministry of Statistics and Programme Implementation (MoSPI)</InfoRow>
           <InfoRow label="Portal">
-            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:underline">
+            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">
               esankhyiki.mospi.gov.in
             </a>
           </InfoRow>

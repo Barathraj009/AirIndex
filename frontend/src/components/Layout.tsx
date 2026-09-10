@@ -26,9 +26,9 @@ const NAV_ITEMS = [
 ]
 
 const ROLE_CHIP: Record<string, string> = {
-  ADMIN: 'bg-brand-500/15 text-brand-300',
-  ANALYST: 'bg-violet-500/15 text-violet-300',
-  VIEWER: 'bg-slate-500/15 text-slate-300',
+  ADMIN: 'bg-brand-500/10 text-brand-700',
+  ANALYST: 'bg-violet-500/10 text-violet-700',
+  VIEWER: 'bg-slate-500/10 text-slate-600',
 }
 
 export default function Layout() {
@@ -51,7 +51,7 @@ export default function Layout() {
       <div className="pointer-events-none fixed inset-0 bg-login-glow" aria-hidden />
 
       <div className="relative flex min-h-screen">
-        <aside className="sticky top-0 h-screen w-[232px] shrink-0 border-r border-line bg-surface/70 backdrop-blur-xl flex flex-col">
+        <aside className="sticky top-0 h-screen w-[232px] shrink-0 border-r border-line bg-white/80 backdrop-blur-xl flex flex-col">
           {/* Brand */}
           <div className="flex items-center gap-3 px-5 py-5 border-b border-line">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-gradient text-white shadow-glow">
@@ -73,16 +73,16 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `group flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-brand-500/12 text-brand-200 shadow-[inset_0_0_0_1px_rgba(84,177,255,0.15)]'
-                      : 'text-slate-400 hover:bg-lineSoft hover:text-slate-200'
+                      ? 'bg-brand-500/10 text-brand-700 shadow-[inset_0_0_0_1px_rgba(20,113,232,0.15)]'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <Icon size={17} className={isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'} />
+                    <Icon size={17} className={isActive ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600'} />
                     {label}
-                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-400" />}
+                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-600" />}
                   </>
                 )}
               </NavLink>
@@ -102,7 +102,7 @@ export default function Layout() {
             </p>
             <button
               onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-xs font-medium text-slate-500 transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-600"
             >
               <LogOut size={14} />
               Sign out
