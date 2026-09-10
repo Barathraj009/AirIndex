@@ -201,3 +201,32 @@ export interface FareAnomaly {
   severity: 'HIGH' | 'MEDIUM' | 'LOW'
   description: string
 }
+
+// MoSPI CPI Airfare Index types
+export interface CpiAirfareIndex {
+  period: string
+  airfare_index: number
+  transport_index: number | null
+  general_index: number | null
+  inflation_yoy: number | null
+  base_year: string
+  source: string
+  source_url: string
+  cpi_code: string
+  fetched_at: string | null
+}
+
+export interface CpiAirfareTrendPoint {
+  period: string
+  airfare_index: number
+  transport_index: number | null
+  general_index: number | null
+  inflation_yoy: number | null
+}
+
+export interface CpiAirfareTrend {
+  series: CpiAirfareTrendPoint[]
+  base_year: string
+  source: string
+  cpi_code: string
+}
