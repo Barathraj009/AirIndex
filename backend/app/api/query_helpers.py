@@ -12,8 +12,17 @@ from app.models.observations import FareObservation
 
 
 def load_observations_df(db: Session, origin: str = None, destination: str = None,
-                          period: str = None) -> pd.DataFrame:
+                          period: str = None, include_benchmarks: bool = False) -> pd.DataFrame:
+    """Load FareObservation rows into a pandas DataFrame.
+
+    Benchmark/reference rows (e.g. MoSPI CPI fuel/fare benchmarks) are
+    excluded by default so the airfare index and analytics are computed
+    strictly from actual airfare observations. Raw fare queries (Data
+    Explorer, exports) read the model directly and keep every row.
+    """
     q = db.query(FareObservation)
+    if not include_benchmarks:
+        q = q.filter(FareObservation.fare_class != "CPI_BENCHMARK")
     if origin:
         q = q.filter(FareObservation.origin == origin)
     if destination:

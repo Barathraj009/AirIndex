@@ -59,7 +59,7 @@ export default function Overview() {
 
       {/* Surge & Price Spike Alerts Card */}
       {anomalies.length > 0 && (
-        <Card title="⚡ Live Surge Pricing & Price Gouging Alerts" className="mb-6 border-amber-200 bg-amber-50/40">
+        <Card title="⚡ Detected Surge Pricing & Price Anomaly Alerts" className="mb-6 border-amber-200 bg-amber-50/40">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {anomalies.slice(0, 3).map((anom, idx) => (
               <div key={idx} className="bg-white border border-amber-200 rounded-lg p-3 shadow-xs">

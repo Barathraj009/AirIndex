@@ -168,7 +168,7 @@ export default function GeospatialMap() {
             })}
           </svg>
           <div className="text-[11px] text-slate-400 pb-2">
-            Click on any flight corridor arc or airport hub node to inspect real-time metrics.
+            Click on any flight corridor arc or airport hub node to inspect corridor metrics from the current dataset.
           </div>
         </Card>
 

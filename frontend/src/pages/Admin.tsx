@@ -61,7 +61,7 @@ export default function Admin() {
     try {
       setCalibrateStatus('Calibrating route weights with DGCA passenger traffic data…')
       await api.post('/admin/calibrate-weights-dgca', {})
-      setCalibrateStatus('Successfully calibrated all route weights using official DGCA domestic passenger traffic figures!')
+      setCalibrateStatus('Successfully calibrated all route weights using bundled DGCA domestic passenger traffic reference figures!')
       routesQuery.refetch()
       auditQuery.refetch()
       setTimeout(() => setCalibrateStatus(null), 5000)
