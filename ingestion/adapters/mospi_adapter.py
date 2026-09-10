@@ -89,7 +89,7 @@ class MospiCpiAdapter(BaseSourceAdapter):
             # Fetch multiple years of data for time series
             years = ["2025", "2026"]
 
-with httpx.Client(timeout=30.0, follow_redirects=True, verify=_mospi_ssl_context()) as client:
+            with httpx.Client(timeout=30.0, follow_redirects=True, verify=_mospi_ssl_context()) as client:
                 for year_str in years:
                     for page in range(1, 25):
                         try:
