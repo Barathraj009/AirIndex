@@ -179,8 +179,26 @@ def _fetch_live_cpi_series() -> Dict[str, Dict]:
         return _FALLBACK_MOSPI_CPI
 
 
-# Module-level: fetch once at import time
-HISTORICAL_MOSPI_CPI = _fetch_live_cpi_series()
+# Lazy-loaded: fetched on first access, not at import time.
+# This avoids blocking app startup with network calls.
+_HISTORICAL_MOSPI_CPI = None
+
+# Backwards-compatible alias (populated on first access).
+# Tests import this name; apps should use get_historical_mospi_cpi().
+HISTORICAL_MOSPI_CPI = None
+
+
+def get_historical_mospi_cpi() -> Dict[str, Dict]:
+    """Return the MoSPI CPI series, fetching from the API on first call.
+
+    The result is cached after the first successful fetch so subsequent
+    accesses are instant and deterministic.
+    """
+    global _HISTORICAL_MOSPI_CPI, HISTORICAL_MOSPI_CPI
+    if _HISTORICAL_MOSPI_CPI is None:
+        _HISTORICAL_MOSPI_CPI = _fetch_live_cpi_series()
+        HISTORICAL_MOSPI_CPI = _HISTORICAL_MOSPI_CPI
+    return _HISTORICAL_MOSPI_CPI
 
 
 @dataclass
@@ -217,12 +235,14 @@ def simulate_cpi_augmentation(
     weight_air_in_transport = airfare_weight_in_cpi / transport_group_weight if transport_group_weight > 0 else 0.0233
     weight_other_in_transport = 1.0 - weight_air_in_transport
 
-    sorted_periods = sorted(p for p in apix_series if p in HISTORICAL_MOSPI_CPI)
+    hist_cpi = get_historical_mospi_cpi()
+
+    sorted_periods = sorted(p for p in apix_series if p in hist_cpi)
     if not sorted_periods:
-        sorted_periods = sorted(HISTORICAL_MOSPI_CPI.keys())
+        sorted_periods = sorted(hist_cpi.keys())
 
     for period in sorted_periods:
-        hist = HISTORICAL_MOSPI_CPI.get(period)
+        hist = hist_cpi.get(period)
         if not hist:
             continue
 
@@ -256,7 +276,7 @@ def simulate_cpi_augmentation(
     max_delta = float(np.max(np.abs(deltas))) if deltas else 0.0
 
     source_note = "live MoSPI CPI data (api.mospi.gov.in)"
-    if HISTORICAL_MOSPI_CPI is _FALLBACK_MOSPI_CPI:
+    if hist_cpi is _FALLBACK_MOSPI_CPI:
         source_note = "hardcoded representative series (MoSPI API unreachable)"
 
     summary = (

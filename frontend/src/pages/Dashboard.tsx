@@ -1,15 +1,29 @@
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, Area, AreaChart, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts'
+import { Plane, TrendingUp, Scale, CalendarDays } from 'lucide-react'
 import { useApiQuery } from '../hooks/useApiQuery'
-import { PageHeader, StatCard, Card, LoadingState, ErrorState, SourceBadge, EmptyState } from '../components/ui'
+import { PageHeader, StatCard, Card, LoadingState, ErrorState, SourceBadge, EmptyState, InfoRow, TrendPill } from '../components/ui'
 import type { CpiAirfareIndex, CpiAirfareTrend } from '../types'
 
 export default function Dashboard() {
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
-  const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=12')
+  const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=24')
 
   if (current.loading) return <LoadingState label="Loading CPI data..." />
-  if (current.error) return <ErrorState message={current.error} />
-  if (!current.data) return null
+  if (current.error) return <ErrorState message={current.error} onRetry={current.refetch} />
+  if (!current.data) {
+    return (
+      <>
+        <PageHeader
+          title="Airfare Price Index"
+          subtitle="MoSPI CPI 07.3.3.1 · Base 2024=100"
+          action={<SourceBadge sourceType="PUBLIC_DATASET" />}
+        />
+        <Card>
+          <EmptyState message="Index data is not available yet." />
+        </Card>
+      </>
+    )
+  }
 
   const data = current.data
   const trendData = trend.data?.series ?? []
@@ -29,116 +43,159 @@ export default function Dashboard() {
     )
   }
 
+  // MoM change from trend series (fallback to null if only 1 point)
+  const momPct = useMemoMom(trendData, data.period)
+  const gapVsGeneral =
+    data.general_index && data.general_index > 0
+      ? ((data.airfare_index! - data.general_index) / data.general_index) * 100
+      : null
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Airfare Price Index"
-        subtitle={`MoSPI CPI 07.3.3.1 · Base ${data.base_year}`}
+        subtitle={
+          <>
+            Official air transport CPI sub-index · MoSPI code 07.3.3.1 · Base {data.base_year}
+          </>
+        }
         action={<SourceBadge sourceType="PUBLIC_DATASET" />}
       />
 
-      {/* Primary Index Card */}
-      <div className="bg-blue-600 text-white rounded-lg px-5 py-4 mb-6">
-        <div className="text-xs font-bold uppercase tracking-wide opacity-80 mb-1">
-          Current Airfare CPI Index
-        </div>
-        <div className="text-3xl font-bold">{data.airfare_index!.toFixed(2)}</div>
-        <div className="text-xs opacity-80 mt-1">
-          Period: {data.period} · Source: MoSPI (esankhyiki.mospi.gov.in)
+      {/* Hero index card */}
+      <div className="relative overflow-hidden rounded-2xl border border-brand-700/30 bg-raised shadow-glow animate-fade-in-up">
+        <div className="absolute inset-0 bg-brand-gradient opacity-[0.07]" aria-hidden />
+        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-500/20 blur-3xl" aria-hidden />
+        <div className="relative flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-brand-300">
+              <Plane size={13} />
+              Current Airfare Price Index
+            </div>
+            <div className="mt-3 flex items-baseline gap-3">
+              <span className="text-5xl font-bold tracking-tight text-white tabular-nums">
+                {data.airfare_index!.toFixed(2)}
+              </span>
+              <span className="text-sm font-medium text-muted">base 2024 = 100</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+              <span className="inline-flex items-center gap-1">
+                <CalendarDays size={12} /> Period {data.period}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <TrendingUp size={12} /> YoY <TrendPill value={data.inflation_yoy} />
+              </span>
+              {momPct !== null && (
+                <span className="inline-flex items-center gap-1">
+                  MoM <TrendPill value={momPct} />
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="shrink-0 rounded-xl border border-line bg-base/50 px-5 py-4 sm:text-right">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">vs General CPI</div>
+            <div className={`mt-1.5 text-2xl font-bold tabular-nums ${gapVsGeneral !== null && gapVsGeneral > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {gapVsGeneral !== null ? `${gapVsGeneral >= 0 ? '+' : ''}${gapVsGeneral.toFixed(2)}%` : '—'}
+            </div>
+            <div className="mt-1 text-[11px] text-muted">
+              {gapVsGeneral !== null && gapVsGeneral > 0
+                ? 'Airfares rising faster than headline CPI'
+                : 'Airfares tracking near headline CPI'}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      {/* Key stats */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Airfare CPI"
           value={data.airfare_index!.toFixed(2)}
-          sub={`Code ${data.cpi_code || '07.3.3.1'}`}
+          sub={`Code ${data.cpi_code || '07.3.3.1'} · MoSPI`}
+          icon={<Plane size={18} />}
+          accent
         />
         <StatCard
           label="Transport CPI"
           value={data.transport_index?.toFixed(2) ?? 'N/A'}
-          sub="Division 07"
+          sub="Division 07 · all transport"
+          icon={<TrendingUp size={18} />}
         />
         <StatCard
-          label="YoY Inflation"
-          value={data.inflation_yoy !== null ? `${data.inflation_yoy.toFixed(2)}%` : 'N/A'}
-          tone={data.inflation_yoy !== null && data.inflation_yoy > 0 ? 'up' : 'down'}
-          sub="Year-over-year"
+          label="General CPI"
+          value={data.general_index?.toFixed(2) ?? 'N/A'}
+          sub="All-India headline index"
+          icon={<Scale size={18} />}
         />
       </div>
 
-      {/* Trend Chart */}
+      {/* Trend chart */}
       {trendData.length > 0 && (
-        <Card title="CPI Airfare Index Trend" className="mb-6">
-          <p className="text-xs text-muted mb-3">
-            Monthly CPI values from MoSPI (base 2024=100)
+        <Card
+          title="Index Trend"
+          action={<span className="text-[11px] text-muted">last {trendData.length} months</span>}
+        >
+          <p className="pb-3 text-xs text-muted">
+            Monthly airfare CPI contrasted with the transport and all-item indices.
           </p>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} />
-              <Tooltip />
+          <ResponsiveContainer width="100%" height={340}>
+            <AreaChart data={trendData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="gradAirfare" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#54b1ff" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#54b1ff" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gradGeneral" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#64748b" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="#64748b" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="period" tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+              <Tooltip
+                contentStyle={{ background: '#131c2e', border: '1px solid #1e293b', borderRadius: 12 }}
+                labelStyle={{ color: '#e2e8f0', fontWeight: 600 }}
+              />
               <Legend />
-              <Line
-                type="monotone"
-                dataKey="airfare_index"
-                stroke="#1d4ed8"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                name="Airfare CPI"
-              />
-              <Line
-                type="monotone"
-                dataKey="transport_index"
-                stroke="#64748b"
-                strokeWidth={1}
-                dot={{ r: 2 }}
-                name="Transport CPI"
-              />
-              <Line
-                type="monotone"
-                dataKey="general_index"
-                stroke="#94a3b8"
-                strokeWidth={1}
-                dot={{ r: 2 }}
-                name="General CPI"
-              />
-            </LineChart>
+              <Area type="monotone" dataKey="airfare_index" name="Airfare CPI" stroke="#54b1ff" strokeWidth={2.5} fill="url(#gradAirfare)" dot={{ r: 2.5, fill: '#54b1ff' }} activeDot={{ r: 4 }} />
+              <Area type="monotone" dataKey="transport_index" name="Transport CPI" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={1.5} fill="none" dot={false} />
+              <Area type="monotone" dataKey="general_index" name="General CPI" stroke="#64748b" strokeWidth={1.5} fill="url(#gradGeneral)" dot={false} />
+            </AreaChart>
           </ResponsiveContainer>
         </Card>
       )}
 
-      {/* Data Source Info */}
-      <Card title="Data Source" className="mb-6">
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted">Source</span>
-            <span className="font-medium">Ministry of Statistics and Programme Implementation</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Portal</span>
-            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+      {/* Data source info */}
+      <Card title="Data Source">
+        <div className="divide-y divide-lineSoft">
+          <InfoRow label="Source">Ministry of Statistics and Programme Implementation (MoSPI)</InfoRow>
+          <InfoRow label="Portal">
+            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:underline">
               esankhyiki.mospi.gov.in
             </a>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">CPI Code</span>
-            <span className="font-medium">07.3.3.1 - Passenger transport by air, domestic</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Base Year</span>
-            <span className="font-medium">{data.base_year}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Last Fetched</span>
-            <span className="font-medium">
-              {data.fetched_at ? new Date(data.fetched_at).toLocaleString() : 'N/A'}
-            </span>
-          </div>
+          </InfoRow>
+          <InfoRow label="CPI Code">07.3.3.1 - Passenger transport by air, domestic</InfoRow>
+          <InfoRow label="Base Year">{data.base_year}</InfoRow>
+          <InfoRow label="Last Fetched">
+            {data.fetched_at ? new Date(data.fetched_at).toLocaleString() : 'N/A'}
+          </InfoRow>
         </div>
       </Card>
     </div>
   )
 }
+
+function useMemoMom(trendData: CpiAirfareTrend['series'], currentPeriod: string | null): number | null {
+  if (!currentPeriod || trendData.length < 2) return null
+  const idx = trendData.findIndex((p) => p.period === currentPeriod)
+  if (idx <= 0) return null
+  const prev = trendData[idx - 1].airfare_index
+  const curr = trendData[idx].airfare_index
+  if (!prev) return null
+  return ((curr - prev) / prev) * 100
+}
+
+// Recharts LineChart import retained for potential future toggle views
+export type { CpiAirfareIndex, CpiAirfareTrend }

@@ -1,0 +1,103 @@
+name: pr
+
+# Fast verification on every pull request targeting main:
+#   backend  - alembic upgrade + zero-drift check + unit/integration suite
+#   frontend - typecheck + production build
+# (Full browser e2e runs on push to main in ci.yml to keep PR feedback quick.)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "scripts/**"
+      - "deployment/**"
+      - "tests/**"
+      - ".github/workflows/**"
+
+concurrency:
+  group: pr-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_SCHEMA_USER: airindex
+  POSTGRES_SCHEMA_PASS: airindex_dev_secret
+
+jobs:
+  backend:
+    name: backend tests + alembic drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_SCHEMA_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_SCHEMA_PASS }}
+          POSTGRES_DB: airindex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U airindex"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+      - name: Create dev-schema database (airindex)
+        run: |
+          python3 - <<'PY'
+          import psycopg2
+          conn = psycopg2.connect(host="localhost", user="airindex",
+                                  password="airindex_dev_secret", dbname="postgres")
+          conn.autocommit = True
+          cur = conn.cursor()
+          cur.execute("SELECT 1 FROM pg_database WHERE datname = 'airindex'")
+          if cur.fetchone():
+              print("airindex already exists")
+          else:
+              cur.execute("CREATE DATABASE airindex")
+              print("created airindex")
+          conn.close()
+          PY
+      - name: Alembic upgrade head + zero-drift check (dev schema DB)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex
+        run: |
+          alembic upgrade head
+          alembic check
+      - name: Run full unit/integration suite against airindex_test
+        env:
+          PYTHONPATH: ".:./backend"
+          JWT_SECRET_KEY: ci-not-for-production
+        run: python -m unittest discover -s tests -q
+
+  frontend:
+    name: frontend typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Production build
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:8000/api
+        run: npm run build

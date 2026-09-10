@@ -11,8 +11,7 @@ from app.models.auth import User, AuditLogEntry
 from app.schemas.auth import (
     LoginRequest, TokenResponse, RefreshRequest, UserOut,
     OtpExchangeRequest, OtpVerifyRequest, OtpCheckUserResponse,
-    RegisterWithOtpRequest, ChangePasswordRequest, SeedUserRequest,
-    CheckUserRequest
+    RegisterWithOtpRequest, ChangePasswordRequest, CheckUserRequest
 )
 from app.api.deps import get_current_user, _token_config
 
@@ -158,6 +157,12 @@ def me(current_user: User = Depends(get_current_user)):
 
 @router.post("/otp/exchange", response_model=TokenResponse)
 def otp_exchange(payload: OtpExchangeRequest, db: Session = Depends(get_db)):
+    """Exchange a valid OTP token for access/refresh tokens.
+
+    Only works for pre-existing users. New users must register via
+    /register-with-otp. This endpoint does NOT create accounts or
+    grant elevated privileges.
+    """
     settings = get_settings()
     try:
         otp_payload = jwt.decode(
@@ -175,16 +180,15 @@ def otp_exchange(payload: OtpExchangeRequest, db: Session = Depends(get_db)):
     if otp_email != payload.email.lower():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="email_mismatch")
 
-    email = otp_email
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(User.email == otp_email).first()
     if user is None:
-        user = User(
-            email=email,
-            hashed_password=hash_password(""),
-            role="ADMIN",
-            is_active=True,
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user_not_found_register_first",
         )
-        db.add(user)
+
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account_disabled")
 
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
@@ -198,27 +202,4 @@ def otp_exchange(payload: OtpExchangeRequest, db: Session = Depends(get_db)):
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 
-@router.post("/seed-user")
-def seed_user(payload: SeedUserRequest, db: Session = Depends(get_db)):
-    """Seed or update a user (dev only)."""
-    existing = db.query(User).filter(User.email == payload.email.lower()).first()
-    if existing:
-        existing.hashed_password = hash_password(payload.password)
-        existing.username = payload.username
-        db.commit()
-        return {"status": "updated", "email": payload.email, "username": payload.username}
-    
-    if db.query(User).filter(User.username == payload.username).first():
-        return {"status": "username_taken", "username": payload.username}
-    
-    user = User(
-        email=payload.email.lower(),
-        username=payload.username,
-        hashed_password=hash_password(payload.password),
-        role="ADMIN",
-        is_active=True,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return {"status": "created", "email": payload.email, "username": payload.username}
+

@@ -63,12 +63,6 @@ class CheckUserRequest(BaseModel):
     email: EmailStr
 
 
-class SeedUserRequest(BaseModel):
-    email: EmailStr
-    username: str
-    password: str
-
-
 class UserRoleUpdate(BaseModel):
     role: str
 

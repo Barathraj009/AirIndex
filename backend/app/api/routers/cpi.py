@@ -7,7 +7,7 @@ from app.api.deps import require_permission
 from app.api.query_helpers import load_observations_df
 from app.services.index_engine import compute_index_series
 from app.services.cpi_engine import (
-    HISTORICAL_MOSPI_CPI,
+    get_historical_mospi_cpi,
     _FALLBACK_MOSPI_CPI,
     DEFAULT_AIRFARE_IN_CPI_WEIGHT,
     DEFAULT_TRANSPORT_WEIGHT,
@@ -25,7 +25,8 @@ class CpiSimulationRequest(BaseModel):
 
 @router.get("/baseline")
 def get_cpi_baseline(_=Depends(require_permission("view_dashboard"))):
-    is_live = HISTORICAL_MOSPI_CPI is not _FALLBACK_MOSPI_CPI
+    hist = get_historical_mospi_cpi()
+    is_live = hist is not _FALLBACK_MOSPI_CPI
     points = [
         {
             "period": period,
@@ -33,7 +34,7 @@ def get_cpi_baseline(_=Depends(require_permission("view_dashboard"))):
             "transport_cpi": data["transport_cpi"],
             "airfare_subindex_lagged": data["airfare_subindex_lagged"],
         }
-        for period, data in sorted(HISTORICAL_MOSPI_CPI.items())
+        for period, data in sorted(hist.items())
     ]
     return {
         "base_year": "2024=100",
@@ -89,7 +90,7 @@ def simulate_cpi(
     )
     out = res.as_dict()
     out["is_simulation"] = True
-    is_live = HISTORICAL_MOSPI_CPI is not _FALLBACK_MOSPI_CPI
+    is_live = get_historical_mospi_cpi() is not _FALLBACK_MOSPI_CPI
     out["inputs_note"] = (
         "CPI inputs sourced live from https://api.mospi.gov.in "
         "(code 07.3.3.1 = Passenger transport by air, domestic, base 2024=100). "

@@ -1,38 +1,5 @@
 services:
   - type: web
-    name: airindex-otp
-    runtime: node
-    plan: free
-    buildCommand: cd otp-service/backend && npm install
-    startCommand: cd otp-service/backend && node server.js
-    envVars:
-      - key: PORT
-        value: 4000
-      - key: NODE_ENV
-        value: production
-      - key: CORS_ORIGIN
-        sync: false
-      - key: GMAIL_USER
-        sync: false
-      - key: GMAIL_APP_PASSWORD
-        sync: false
-      - key: EMAIL_TRANSPORT
-        value: json
-      - key: GMAIL_ONLY
-        value: "true"
-      - key: OTP_HASH_SECRET
-        generateValue: true
-      - key: JWT_SECRET
-        generateValue: true
-      - key: JWT_EXPIRES_IN
-        value: 15m
-      - key: USE_COOKIE_SESSION
-        value: "true"
-      - key: COOKIE_SAMESITE
-        value: none
-    healthCheckPath: /api/health
-
-  - type: web
     name: airindex-backend
     runtime: docker
     plan: free
@@ -44,8 +11,6 @@ services:
           name: airindex-db
           property: connectionString
       - key: JWT_SECRET_KEY
-        generateValue: true
-      - key: OTP_SERVICE_JWT_SECRET
         generateValue: true
       - key: KIWI_API_KEY
         sync: false
@@ -68,8 +33,6 @@ services:
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_BASE_URL
-        sync: false
-      - key: VITE_OTP_SERVICE_URL
         sync: false
     routes:
       - type: rewrite

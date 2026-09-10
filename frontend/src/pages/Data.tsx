@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import { useApiQuery } from '../hooks/useApiQuery'
-import { PageHeader, Card, StatCard, LoadingState, ErrorState, EmptyState, SourceBadge } from '../components/ui'
+import { PageHeader, Card, StatCard, LoadingState, ErrorState, EmptyState, SourceBadge, InfoRow, TrendPill } from '../components/ui'
+import { TabBar } from '../components/Tabs'
 import type { CpiAirfareTrend, CpiAirfareIndex } from '../types'
 
 type DataTab = 'observations' | 'source'
-
-const TABS: { key: DataTab; label: string }[] = [
-  { key: 'observations', label: 'CPI Observations' },
-  { key: 'source', label: 'Source & Freshness' },
-]
 
 export default function Data() {
   const [tab, setTab] = useState<DataTab>('observations')
@@ -16,9 +12,19 @@ export default function Data() {
   return (
     <div>
       <PageHeader title="Data" subtitle="CPI airfare observations from MoSPI" />
-      <TabBar tabs={TABS} active={tab} onChange={setTab} />
-      {tab === 'observations' && <ObservationsTab />}
-      {tab === 'source' && <SourceTab />}
+      <TabBar
+        tabs={[
+          { key: 'observations', label: 'CPI Observations' },
+          { key: 'source', label: 'Source & Freshness' },
+        ]}
+        active={tab}
+        onChange={(k) => setTab(k as DataTab)}
+      />
+
+      <div key={tab} className="animate-fade-in-up">
+        {tab === 'observations' && <ObservationsTab />}
+        {tab === 'source' && <SourceTab />}
+      </div>
     </div>
   )
 }
@@ -28,10 +34,9 @@ function ObservationsTab() {
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
 
   if (trend.loading) return <LoadingState label="Loading CPI observations..." />
-  if (trend.error) return <ErrorState message={trend.error} />
+  if (trend.error) return <ErrorState message={trend.error} onRetry={trend.refetch} />
 
   const data = trend.data?.series ?? []
-
   if (data.length === 0) {
     return (
       <Card>
@@ -40,7 +45,6 @@ function ObservationsTab() {
     )
   }
 
-  // Compute month-over-month change for display
   const rows = data.map((p, i) => {
     const prev = i > 0 ? data[i - 1].airfare_index : null
     const momPct = prev && prev > 0 ? ((p.airfare_index - prev) / prev) * 100 : null
@@ -48,67 +52,53 @@ function ObservationsTab() {
   })
 
   return (
-    <div>
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <StatCard label="Months available" value={rows.length} />
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Months available" value={rows.length} sub="of published MoSPI history" />
         <StatCard
           label="Latest airfare CPI"
           value={current.data?.airfare_index?.toFixed(2) ?? '\u2014'}
           sub={current.data?.period ?? ''}
+          accent
         />
         <StatCard
           label="Latest YoY inflation"
-          value={current.data?.inflation_yoy != null ? `${current.data.inflation_yoy.toFixed(2)}%` : '\u2014'}
+          value={current.data?.inflation_yoy != null ? <TrendPill value={current.data.inflation_yoy} /> : '\u2014'}
+          sub="year over year"
         />
       </div>
       <Card>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-muted border-b border-slate-200">
-                <th className="py-2 pr-3">Period</th>
-                <th className="py-2 pr-3 text-right">Airfare CPI</th>
-                <th className="py-2 pr-3 text-right">Transport CPI</th>
-                <th className="py-2 pr-3 text-right">General CPI</th>
-                <th className="py-2 pr-3 text-right">MoM %</th>
-                <th className="py-2 pr-3 text-right">YoY %</th>
+              <tr className="text-left text-muted border-b border-line bg-raised/60">
+                <th className="py-2.5 px-3 font-medium">Period</th>
+                <th className="py-2.5 px-3 text-right font-medium">Airfare CPI</th>
+                <th className="py-2.5 px-3 text-right font-medium">Transport CPI</th>
+                <th className="py-2.5 px-3 text-right font-medium">General CPI</th>
+                <th className="py-2.5 px-3 text-right font-medium">MoM %</th>
+                <th className="py-2.5 px-3 text-right font-medium">YoY %</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => (
-                <tr key={p.period} className="border-b border-slate-100">
-                  <td className="py-1.5 pr-3 font-medium">{p.period}</td>
-                  <td className="py-1.5 pr-3 text-right">{p.airfare_index.toFixed(2)}</td>
-                  <td className="py-1.5 pr-3 text-right text-muted">
+                <tr key={p.period} className="border-b border-lineSoft hover:bg-raised/40 transition-colors">
+                  <td className="py-2 px-3 font-medium text-ink">{p.period}</td>
+                  <td className="py-2 px-3 text-right tabular-nums">{p.airfare_index.toFixed(2)}</td>
+                  <td className="py-2 px-3 text-right tabular-nums text-muted">
                     {p.transport_index != null ? p.transport_index.toFixed(2) : '\u2014'}
                   </td>
-                  <td className="py-1.5 pr-3 text-right text-muted">
+                  <td className="py-2 px-3 text-right tabular-nums text-muted">
                     {p.general_index != null ? p.general_index.toFixed(2) : '\u2014'}
                   </td>
-                  <td className="py-1.5 pr-3 text-right">
-                    {p.mom_pct != null ? (
-                      <span className={p.mom_pct >= 0 ? 'text-red-600' : 'text-emerald-600'}>
-                        {p.mom_pct >= 0 ? '+' : ''}{p.mom_pct.toFixed(2)}%
-                      </span>
-                    ) : (
-                      '\u2014'
-                    )}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right">
-                    {p.inflation_yoy != null ? (
-                      <span className={p.inflation_yoy >= 0 ? 'text-red-600' : 'text-emerald-600'}>
-                        {p.inflation_yoy >= 0 ? '+' : ''}{p.inflation_yoy.toFixed(2)}%
-                      </span>
-                    ) : (
-                      '\u2014'
-                    )}
-                  </td>
+                  <td className="py-2 px-3 text-right"><TrendPill value={p.mom_pct} /></td>
+                  <td className="py-2 px-3 text-right"><TrendPill value={p.inflation_yoy} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-muted mt-3">
+        <p className="mt-4 text-xs text-muted">
           Source: MoSPI Consolidated CPI (code 07.3.3.1, base 2024=100) via esankhyiki.mospi.gov.in.
         </p>
       </Card>
@@ -120,77 +110,43 @@ function SourceTab() {
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
 
   if (current.loading) return <LoadingState label="Loading source info..." />
-  if (current.error) return <ErrorState message={current.error} />
+  if (current.error) return <ErrorState message={current.error} onRetry={current.refetch} />
 
   const data = current.data
 
   return (
-    <div>
-      <Card className="mb-6">
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted">Primary data source</span>
-            <span className="font-medium">
-              <SourceBadge sourceType="PUBLIC_DATASET" />
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Publisher</span>
-            <span className="font-medium">Ministry of Statistics and Programme Implementation (MoSPI)</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Portal</span>
-            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+    <div className="grid gap-5 lg:grid-cols-2">
+      <Card title="Primary data source">
+        <div className="flex items-center gap-2 pb-3">
+          <SourceBadge sourceType="PUBLIC_DATASET" />
+          <span className="text-xs text-muted">authoritative &amp; free-to-use</span>
+        </div>
+        <div className="divide-y divide-lineSoft">
+          <InfoRow label="Publisher">Ministry of Statistics and Programme Implementation (MoSPI)</InfoRow>
+          <InfoRow label="Portal">
+            <a href="https://esankhyiki.mospi.gov.in" target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:underline">
               esankhyiki.mospi.gov.in
             </a>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">CPI code</span>
-            <span className="font-medium">07.3.3.1 - Passenger transport by air, domestic</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Base year</span>
-            <span className="font-medium">{data?.base_year ?? '2024=100'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Release cadence</span>
-            <span className="font-medium">Monthly (published ~12th of following month)</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Last fetched</span>
-            <span className="font-medium">
-              {data?.fetched_at ? new Date(data.fetched_at).toLocaleString() : 'Not yet fetched'}
-            </span>
-          </div>
+          </InfoRow>
+          <InfoRow label="CPI code">07.3.3.1 · Passenger transport by air, domestic</InfoRow>
+          <InfoRow label="Base year">{data?.base_year ?? '2024=100'}</InfoRow>
+          <InfoRow label="Release cadence">Monthly (published ~12th of following month)</InfoRow>
         </div>
       </Card>
-      <Card>
-        <p className="text-xs text-muted">
-          The APIx platform ingests the official MoSPI Consolidated CPI series for the
-          air transport sub-component. The backend refreshes this automatically every day
-          (06:00 UTC) and on startup. No synthetic or scraped fare data is used.
+
+      <Card title="Pipeline & freshness">
+        <div className="divide-y divide-lineSoft">
+          <InfoRow label="Last fetched">
+            {data?.fetched_at ? new Date(data.fetched_at).toLocaleString() : 'Not yet fetched'}
+          </InfoRow>
+          <InfoRow label="Backend">Fetch from api.mospi.gov.in via SSL with legacy TLS support</InfoRow>
+          <InfoRow label="Refresh schedule">Daily at 06:00 UTC + on startup</InfoRow>
+        </div>
+        <p className="mt-4 rounded-lg border border-brand-500/25 bg-brand-500/10 px-3 py-2.5 text-xs leading-relaxed text-brand-200">
+          The APIx platform ingests the official MoSPI Consolidated CPI series for the air transport
+          sub-component. No synthetic or scraped fare data is used.
         </p>
       </Card>
-    </div>
-  )
-}
-
-function TabBar({ tabs, active, onChange }: { tabs: { key: string; label: string }[]; active: string; onChange: (k: any) => void }) {
-  return (
-    <div className="flex border-b border-slate-200 mb-6">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          onClick={() => onChange(t.key)}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
-            active === t.key
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
     </div>
   )
 }
