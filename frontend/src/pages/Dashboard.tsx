@@ -1,17 +1,22 @@
+import { useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, StatCard, Card, LoadingState, ErrorState, SourceBadge } from '../components/ui'
 import type { DashboardSummary, IndexTrend } from '../types'
 
-const TREND_COLORS: Record<string, string> = {
-  LIVE_SCRAPE: '#16a34a',
-  PUBLIC_DATASET: '#1d4ed8',
-  DEMO_SIMULATED: '#d97706',
-}
-
 export default function Dashboard() {
   const summary = useApiQuery<DashboardSummary>('/dashboard/summary')
-  const trend = useApiQuery<IndexTrend>('/index/trend')
+  const availablePeriods = useApiQuery<{ periods: string[] }>('/index/available-periods')
+
+  const periodsCsv = useMemo(() => {
+    const p = availablePeriods.data?.periods
+    return p && p.length > 0 ? p.join(',') : null
+  }, [availablePeriods.data])
+
+  const trend = useApiQuery<IndexTrend>(
+    periodsCsv ? `/index/trend?periods=${encodeURIComponent(periodsCsv)}` : null,
+    [periodsCsv],
+  )
 
   if (summary.loading) return <LoadingState label="Loading dashboard..." />
   if (summary.error) return <ErrorState message={summary.error} />

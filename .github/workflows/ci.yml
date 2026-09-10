@@ -5,7 +5,7 @@ name: ci
 #              unittest suite against a real Postgres 16
 #   frontend - npm ci, typecheck, production build
 #   e2e      - real Chromium against the built SPA + live backend:
-#              login smoke (8 checks) and route walk (15 routes clean)
+#              login smoke (8 checks) and route walk (4 pages clean)
 # Plus `compose-verify.yml` exercises the real docker compose stack.
 
 on:
@@ -198,7 +198,7 @@ jobs:
         run: python -m playwright install --with-deps chromium
       - name: Login flow smoke (8 checks)
         run: python scripts/browser/login_smoke.py http://localhost:4173
-      - name: Full route walk (13 pages)
+      - name: Full route walk (4 pages)
         run: python scripts/browser/walk_pages.py http://localhost:4173
       - name: Always show server tails on failure
         if: failure()
