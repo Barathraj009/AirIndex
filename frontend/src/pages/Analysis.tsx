@@ -48,32 +48,47 @@ function RoutesTab() {
   const [selected, setSelected] = useState<string | null>(null)
 
   const routeFares = indexQuery.data?.route_fares ?? {}
+  const contributions = indexQuery.data?.route_contributions ?? {}
   const chartData = useMemo(
     () =>
       Object.entries(routeFares)
         .map(([route, d]) => ({
           route,
           change_pct: (d.relative - 1) * 100,
+          weight: d.weight,
+          contribution: contributions[route] ?? 0,
+          base_fare: d.base_period_fare,
+          current_fare: d.as_of_period_fare,
+          relative: d.relative,
         }))
         .sort((a, b) => b.change_pct - a.change_pct),
-    [routeFares],
+    [routeFares, contributions],
   )
 
   if (indexQuery.loading) return <LoadingState label="Loading route analysis..." />
   if (indexQuery.error) return <ErrorState message={indexQuery.error} />
   if (!indexQuery.data) return null
 
-  const detail = selected ? indexQuery.data.route_fares[selected] : null
+  const detail = selected ? chartData.find((d) => d.route === selected) : null
 
   return (
     <div>
-      <Card title="Fare change by route (%)" className="mb-6">
+      <Card title="Fare change by route (%)" className="mb-2">
+        <p className="text-[11px] text-muted mb-3">
+          Raw percentage change in median fare per route (current period vs base period). This is <em>not</em> weighted.
+          The contribution to the index is shown below the chart.
+        </p>
         <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 26)}>
           <BarChart data={chartData} layout="vertical" margin={{ left: 24 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis type="number" tick={{ fontSize: 12 }} unit="%" />
             <YAxis dataKey="route" type="category" width={70} tick={{ fontSize: 12 }} />
-            <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} />
+            <Tooltip
+              formatter={(value: number, name: string) => {
+                if (name === 'change_pct') return [`${value.toFixed(2)}%`, 'Fare change']
+                return [value, name]
+              }}
+            />
             <Bar
               dataKey="change_pct"
               onClick={(d: any) => setSelected(d.route)}
@@ -86,28 +101,81 @@ function RoutesTab() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        <p className="text-xs text-muted mt-2">Click a bar to see route detail below.</p>
+      </Card>
+
+      <Card className="mb-6">
+        <p className="text-[11px] text-muted mb-3">
+          <span className="font-medium text-ink">How to read:</span>{' '}
+          <strong>Fare change</strong> = raw % price move per route.{' '}
+          <strong>Contribution</strong> = how much that route moved the overall index (Fare change &times; Weight).
+          Sum of all contributions ≈ {indexQuery.data.change_from_base_pct.toFixed(2)}% (total index change).
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-muted border-b border-slate-200">
+                <th className="py-2">Route</th>
+                <th className="py-2 text-right">Weight</th>
+                <th className="py-2 text-right">Base &rarr; Current</th>
+                <th className="py-2 text-right">Fare change</th>
+                <th className="py-2 text-right">Contribution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartData.map((d) => (
+                <tr
+                  key={d.route}
+                  className={`border-b border-slate-100 cursor-pointer transition ${selected === d.route ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                  onClick={() => setSelected(selected === d.route ? null : d.route)}
+                >
+                  <td className="py-2 font-medium">{d.route}</td>
+                  <td className="py-2 text-right text-muted">{(d.weight * 100).toFixed(1)}%</td>
+                  <td className="py-2 text-right text-muted">
+                    {`\u20b9${d.base_fare.toLocaleString()}`} &rarr; {`\u20b9${d.current_fare.toLocaleString()}`}
+                  </td>
+                  <td className={`py-2 text-right font-medium ${d.change_pct >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {d.change_pct >= 0 ? '+' : ''}{d.change_pct.toFixed(2)}%
+                  </td>
+                  <td className={`py-2 text-right font-medium ${d.contribution >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {d.contribution >= 0 ? '+' : ''}{d.contribution.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-muted mt-2">Click a row to expand route detail below.</p>
       </Card>
 
       {detail && selected && (
         <Card title={`Route detail \u2014 ${selected}`}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
             <div>
-              <div className="text-xs text-muted uppercase">Weight</div>
+              <div className="text-xs text-muted uppercase">Basket weight</div>
               <div className="font-semibold">{(detail.weight * 100).toFixed(1)}%</div>
             </div>
             <div>
               <div className="text-xs text-muted uppercase">Base fare</div>
-              <div className="font-semibold">{`\u20b9${detail.base_period_fare.toLocaleString()}`}</div>
+              <div className="font-semibold">{`\u20b9${detail.base_fare.toLocaleString()}`}</div>
             </div>
             <div>
               <div className="text-xs text-muted uppercase">Current fare</div>
-              <div className="font-semibold">{`\u20b9${detail.as_of_period_fare.toLocaleString()}`}</div>
+              <div className="font-semibold">{`\u20b9${detail.current_fare.toLocaleString()}`}</div>
             </div>
             <div>
               <div className="text-xs text-muted uppercase">Price relative</div>
-              <div className="font-semibold">{detail.relative.toFixed(3)}</div>
+              <div className="font-semibold">{detail.relative.toFixed(4)}</div>
             </div>
+            <div>
+              <div className="text-xs text-muted uppercase">Index contribution</div>
+              <div className={`font-semibold ${detail.contribution >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                {detail.contribution >= 0 ? '+' : ''}{detail.contribution.toFixed(3)}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 p-2 bg-slate-50 rounded text-[11px] text-muted">
+            Calculation: {`\u20b9${detail.base_fare.toLocaleString()}`} &rarr; {`\u20b9${detail.current_fare.toLocaleString()}`} = {detail.change_pct >= 0 ? '+' : ''}{detail.change_pct.toFixed(2)}% raw change.
+            Weighted contribution = {(detail.weight * 100).toFixed(1)}% weight &times; {detail.change_pct >= 0 ? '+' : ''}{detail.change_pct.toFixed(2)}% = {detail.contribution >= 0 ? '+' : ''}{detail.contribution.toFixed(3)}.
           </div>
         </Card>
       )}

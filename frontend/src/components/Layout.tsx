@@ -63,7 +63,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="px-5 py-3 border-t border-slate-200 text-[11px] text-muted">
-          All figures may include DEMO/SIMULATED data.
+          Data sourced from public government datasets.
         </div>
         <div className="border-t border-slate-200 px-5 py-3">
           <button

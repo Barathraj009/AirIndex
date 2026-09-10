@@ -28,7 +28,8 @@ def dashboard_summary(db: Session = Depends(get_db), _=Depends(require_permissio
     current_period = periods[-1]
 
     config = IndexConfig(base_period=base_period, route_weights=route_weights,
-                          booking_window_weights=(active_config.booking_window_weights or None))
+                          booking_window_weights=(active_config.booking_window_weights or None),
+                          include_suspicious=active_config.include_suspicious if active_config else False)
     result = compute_index(df, config, as_of_period=current_period)
 
     return {

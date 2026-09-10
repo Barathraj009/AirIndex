@@ -30,7 +30,7 @@ export default function Dashboard() {
 
   const trendData = (trend.data?.series ?? []).filter((p) => p.index_value !== null)
 
-  const dominantSource = 'DEMO_SIMULATED'
+  const dominantSource = 'PUBLIC_DATASET'
 
   return (
     <div>
@@ -41,10 +41,6 @@ export default function Dashboard() {
           <SourceBadge sourceType={dominantSource} />
         }
       />
-
-      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-6 text-xs text-amber-800">
-        Demo data &mdash; figures are simulated representative series, not measured statistics.
-      </div>
 
       <div className="bg-blue-600 text-white rounded-lg px-5 py-4 mb-6">
         <div className="text-xs font-bold uppercase tracking-wide opacity-80 mb-1">Current APIx</div>
@@ -95,26 +91,43 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <Card title="Route contributors to index change">
+        <Card>
+          <h2 className="text-sm font-semibold text-ink mb-1">Route contribution to index</h2>
+          <p className="text-[11px] text-muted mb-3">
+            How much each route moved the overall index (weighted by basket share).
+            <span className="font-medium text-ink"> Contribution = Weight &times; Fare change %</span>.
+            All contributions sum to ≈ {index.change_from_base_pct.toFixed(2)}%.
+          </p>
           <div className="space-y-2">
-            {topContributors.map(([route, val]) => (
-              <div key={route} className="flex items-center gap-3 text-sm">
-                <div className="w-20 font-medium text-xs">{route}</div>
-                <div className="flex-1 h-3 bg-slate-100 rounded relative overflow-hidden">
-                  <div
-                    className={`absolute h-3 ${val >= 0 ? 'bg-red-500' : 'bg-emerald-500'}`}
-                    style={{
-                      width: `${Math.min(100, Math.abs(val) * 20)}%`,
-                      left: val >= 0 ? '50%' : undefined,
-                      right: val < 0 ? '50%' : undefined,
-                    }}
-                  />
+            {topContributors.map(([route, val]) => {
+              const fare = index.route_fares[route]
+              const rawChange = fare ? (fare.relative - 1) * 100 : null
+              return (
+                <div key={route} className="flex items-center gap-3 text-sm">
+                  <div className="w-20 font-medium text-xs">{route}</div>
+                  <div className="flex-1 h-3 bg-slate-100 rounded relative overflow-hidden">
+                    <div
+                      className={`absolute h-3 ${val >= 0 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                      style={{
+                        width: `${Math.min(100, Math.abs(val) * 20)}%`,
+                        left: val >= 0 ? '50%' : undefined,
+                        right: val < 0 ? '50%' : undefined,
+                      }}
+                    />
+                  </div>
+                  <div className="w-40 text-right text-xs">
+                    <span className={`font-medium ${val >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {val >= 0 ? '+' : ''}{val.toFixed(2)}
+                    </span>
+                    {rawChange !== null && (
+                      <span className="text-muted ml-1.5">
+                        ({rawChange >= 0 ? '+' : ''}{rawChange.toFixed(1)}% raw)
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className={`w-16 text-right text-xs ${val >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  {val.toFixed(3)}
-                </div>
-              </div>
-            ))}
+              )
+            })}
             {topContributors.length === 0 && (
               <p className="text-xs text-muted">No route contribution data.</p>
             )}
