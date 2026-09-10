@@ -18,5 +18,7 @@ ENV PORT=8000
 
 EXPOSE 8000
 
-# Wait for database to be ready, then run migrations and seed
-CMD ["sh", "-c", "echo 'Waiting for database...' && for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do python -c \"import sqlalchemy; sqlalchemy.create_engine('${DATABASE_URL}'.replace('postgresql://', 'postgresql+psycopg2://')).connect()\" && break || echo \"Attempt $i failed, retrying in 5s...\" && sleep 5; done && cd /app/backend && alembic upgrade head && PYTHONPATH=/app/backend:/app python /app/scripts/seed_database.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Wait for database to be ready, then bootstrap reference data and start.
+# No synthetic/demo observations are loaded — the CPI airfare index is
+# populated at startup by the app lifespan hook (live MoSPI fetch).
+CMD ["sh", "-c", "echo 'Waiting for database...' && for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do python -c \"import sqlalchemy; sqlalchemy.create_engine('${DATABASE_URL}'.replace('postgresql://', 'postgresql+psycopg2://')).connect()\" && break || echo \"Attempt $i failed, retrying in 5s...\" && sleep 5; done && cd /app/backend && python -c \"from app.models import Base; from app.core.database import engine; Base.metadata.create_all(engine)\" && PYTHONPATH=/app/backend:/app python /app/scripts/bootstrap_reference.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

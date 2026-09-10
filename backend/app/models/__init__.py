@@ -8,10 +8,11 @@ from app.models.ingestion import IngestionRun
 from app.models.index import IndexConfigModel, IndexRun, RouteContribution, AirlineContribution
 from app.models.auth import User, AuditLogEntry
 from app.models.backtesting import ReferenceDataPoint
+from app.models.cpi import CpiAirfareIndex
 
 __all__ = [
     "Base", "Route", "Airline", "DataSource", "BookingWindowConfig",
     "FareObservation", "IngestionRun",
     "IndexConfigModel", "IndexRun", "RouteContribution", "AirlineContribution",
-    "User", "AuditLogEntry", "ReferenceDataPoint",
+    "User", "AuditLogEntry", "ReferenceDataPoint", "CpiAirfareIndex",
 ]
