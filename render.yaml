@@ -46,7 +46,7 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: OTP_SERVICE_JWT_SECRET
-        value: placeholder
+        generateValue: true
       - key: KIWI_API_KEY
         sync: false
       - key: SEED_ADMIN_EMAIL

@@ -35,6 +35,11 @@ def get_cpi_baseline(_=Depends(require_permission("view_dashboard"))):
     ]
     return {
         "base_year": "2012=100",
+        "data_source": "HARDCODED_REPRESENTATIVE_SERIES",
+        "data_source_note": ("MoSPI CPI inputs (general/transport CPI and the airfare "
+                             "sub-index) are a hand-written representative series for "
+                             "demonstration; they are NOT live MoSPI data and NOT official "
+                             "published values."),
         "default_transport_weight_pct": DEFAULT_TRANSPORT_WEIGHT * 100,
         "default_airfare_weight_pct": DEFAULT_AIRFARE_IN_CPI_WEIGHT * 100,
         "series": points,
@@ -77,4 +82,11 @@ def simulate_cpi(
         transport_group_weight=req.transport_group_weight,
         base_period=config.base_period,
     )
-    return res.as_dict()
+    out = res.as_dict()
+    out["is_simulation"] = True
+    out["inputs_note"] = (
+        "Simulation outputs. MoSPI CPI inputs are a representative hardcoded series "
+        "(not live MoSPI data) and the airfare sub-index is an assumed lagged input; "
+        "deltas/lag estimates are illustrative, not measured statistics."
+    )
+    return out

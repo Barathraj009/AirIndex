@@ -183,6 +183,8 @@ export interface CpiSimulationResponse {
   max_headline_delta_bps: number
   lag_reduction_days_est: number
   policy_summary: string
+  is_simulation?: boolean
+  inputs_note?: string
 }
 
 export interface FareAnomaly {

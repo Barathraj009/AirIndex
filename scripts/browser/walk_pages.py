@@ -23,6 +23,8 @@ ROUTES = [
     ("/quality", "Data Quality"),
     ("/scraping", "Scraping Monitor"),
     ("/backtesting", "Backtesting"),
+    ("/cpi-simulator", "CPI Augmentation"),
+    ("/geospatial-map", "Geospatial Map"),
     ("/methodology", "Methodology"),
     ("/api-docs", "API Docs"),
     ("/admin", "Admin"),

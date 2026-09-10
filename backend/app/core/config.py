@@ -46,6 +46,32 @@ class Settings(BaseSettings):
         return url
 
 
+INSECURE_JWT_SECRETS = {
+    "change-me-in-.env",
+    "replace-with-a-long-random-value",
+    "ci-not-for-production",
+    "",
+}
+INSECURE_OTP_SECRETS = {
+    "dev-otp-jwt-secret-change-in-prod",
+    "placeholder",
+    "",
+}
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if settings.environment == "production":
+        if settings.jwt_secret_key in INSECURE_JWT_SECRETS:
+            raise RuntimeError(
+                "Refusing to start in production: JWT_SECRET_KEY is the known/default "
+                "value. Set a strong random secret via environment variable."
+            )
+        if settings.otp_service_jwt_secret in INSECURE_OTP_SECRETS:
+            raise RuntimeError(
+                "Refusing to start in production: OTP_SERVICE_JWT_SECRET is the "
+                "known/default placeholder. Set a strong random secret via "
+                "environment variable."
+            )
+    return settings

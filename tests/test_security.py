@@ -91,5 +91,53 @@ class TestJWT(unittest.TestCase):
             decode_token(token, wrong_config)
 
 
+class TestProductionSecretGuard(unittest.TestCase):
+    """get_settings() must refuse to boot in production with known/default
+    secrets, while development keeps working with the defaults."""
+
+    def _settings(self, environment, jwt, otp):
+        import os
+
+        from app.core.config import get_settings
+
+        old = {k: os.environ.get(k) for k in ("ENVIRONMENT", "JWT_SECRET_KEY",
+                                              "OTP_SERVICE_JWT_SECRET", "DATABASE_URL")}
+        self.addCleanup(lambda: self._restore(old))
+        get_settings.cache_clear()
+        os.environ["ENVIRONMENT"] = environment
+        os.environ["JWT_SECRET_KEY"] = jwt
+        os.environ["OTP_SERVICE_JWT_SECRET"] = otp
+        os.environ["DATABASE_URL"] = "postgresql+psycopg2://u:p@localhost:5432/x"
+        return get_settings
+
+    @staticmethod
+    def _restore(old):
+        import os
+
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_production_with_default_jwt_secret_refused(self):
+        get_settings = self._settings("production", "change-me-in-.env", "real-secret")
+        with self.assertRaises(RuntimeError) as ctx:
+            get_settings()
+        self.assertIn("JWT_SECRET_KEY", str(ctx.exception))
+
+    def test_production_with_placeholder_otp_secret_refused(self):
+        get_settings = self._settings("production", "real-secret", "placeholder")
+        with self.assertRaises(RuntimeError) as ctx:
+            get_settings()
+        self.assertIn("OTP_SERVICE_JWT_SECRET", str(ctx.exception))
+
+    def test_development_with_default_secrets_allowed(self):
+        get_settings = self._settings(
+            "development", "change-me-in-.env", "dev-otp-jwt-secret-change-in-prod")
+        s = get_settings()
+        self.assertEqual(s.jwt_secret_key, "change-me-in-.env")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

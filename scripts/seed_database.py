@@ -60,6 +60,21 @@ def seed():
         admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@airindex.gov.in")
         admin_password = os.getenv("SEED_ADMIN_PASSWORD", "change-me-immediately")
 
+        environment = os.getenv("ENVIRONMENT", "development")
+        if environment == "production":
+            if admin_password in ("change-me-immediately", "analyst123", "viewer123", "", "1234"):
+                db.close()
+                raise RuntimeError(
+                    "Refusing to seed in production with a default/guardable admin "
+                    "password. Set SEED_ADMIN_PASSWORD to a strong unique value."
+                )
+            if admin_password == admin_email.split("@")[0]:
+                db.close()
+                raise RuntimeError(
+                    "Refusing to seed in production: SEED_ADMIN_PASSWORD must not "
+                    "equal the email local part."
+                )
+
         users_to_seed = [
             (admin_email, admin_password, "ADMIN"),
             ("analyst@airindex.gov.in", "analyst123", "ANALYST"),

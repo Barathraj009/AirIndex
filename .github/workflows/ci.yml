@@ -2,10 +2,10 @@ name: ci
 
 # Full cloud verification on GitHub-hosted runners:
 #   backend  - alembic upgrade + zero-drift check, then the whole
-#              75-test unittest suite against a real Postgres 16
+#              unittest suite against a real Postgres 16
 #   frontend - npm ci, typecheck, production build
 #   e2e      - real Chromium against the built SPA + live backend:
-#              login smoke (8 checks) and route walk (13 routes clean)
+#              login smoke (8 checks) and route walk (15 routes clean)
 # Plus `compose-verify.yml` exercises the real docker compose stack.
 
 on:

@@ -38,6 +38,13 @@ export default function CpiAugmentation() {
         subtitle="Simulate real-time integration of Airfare Price Index (APIx) into India's official Consumer Price Index (Base 2012=100)"
       />
 
+      <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <strong>Simulation, not measured statistics.</strong> The MoSPI CPI inputs
+        shown here are a representative hard-coded series (not live MoSPI data), and
+        the airfare sub-index is an assumed lagged input. The headline delta and lag
+        estimates are illustrative outputs, not official published values.
+      </div>
+
       {/* Simulator Controls Card */}
       <Card className="mb-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -147,7 +154,7 @@ export default function CpiAugmentation() {
                 </LineChart>
               </ResponsiveContainer>
               <p className="text-[11px] text-muted mt-2">
-                Demonstrates how high-frequency airfare price dynamics immediately reflect in the overall headline index.
+                Illustrates how high-frequency airfare price dynamics could reflect in the overall headline index. Values are simulated from the assumed inputs above, not official MoSPI statistics.
               </p>
             </Card>
 
@@ -165,7 +172,7 @@ export default function CpiAugmentation() {
                 </LineChart>
               </ResponsiveContainer>
               <p className="text-[11px] text-muted mt-2">
-                Captures peak travel fare increases that are historically smoothed out by quarterly manual physical surveys.
+                Illustrates how peak travel fare increases might be captured sooner than quarterly manual survey smoothing. Simulated from assumed inputs, not official MoSPI statistics.
               </p>
             </Card>
           </div>
@@ -188,7 +195,13 @@ export default function CpiAugmentation() {
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-slate-700 space-y-2">
               <p className="font-semibold text-slate-900">{simulationData.policy_summary}</p>
               <p>
-                <strong>Key Finding for Statistical Officers:</strong> The traditional manual airfare collection process introduces up to 45–60 days of lag in official CPI releases. By integrating automated daily/weekly APIx observations, MoSPI can accurately capture high-volatility festival travel shocks (e.g. Diwali, Summer holidays) in real time without waiting for retrospective quarterly airline survey returns.
+                <strong>Illustrative Finding for Statistical Officers:</strong> In the
+                simulated setup, the traditional manual airfare collection process is
+                assumed to introduce up to 45–60 days of lag in official CPI releases.
+                By integrating automated daily/weekly APIx observations, MoSPI could in
+                principle capture high-volatility festival travel shocks (e.g. Diwali,
+                Summer holidays) sooner than retrospective quarterly airline survey
+                returns. This is a demonstrated hypothesis, not a measured result.
               </p>
             </div>
           </Card>
