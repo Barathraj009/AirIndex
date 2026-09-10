@@ -204,8 +204,9 @@ export interface FareAnomaly {
 
 // MoSPI CPI Airfare Index types
 export interface CpiAirfareIndex {
-  period: string
-  airfare_index: number
+  available: boolean
+  period: string | null
+  airfare_index: number | null
   transport_index: number | null
   general_index: number | null
   inflation_yoy: number | null
@@ -225,6 +226,7 @@ export interface CpiAirfareTrendPoint {
 }
 
 export interface CpiAirfareTrend {
+  available: boolean
   series: CpiAirfareTrendPoint[]
   base_year: string
   source: string

@@ -1,25 +1,27 @@
 import { useState, useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Cell } from 'recharts'
-import { LineChart, Line } from 'recharts'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, Cell } from 'recharts'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, Card, LoadingState, ErrorState, EmptyState } from '../components/ui'
-import type { IndexResult, Route } from '../types'
+import type { CpiAirfareTrend, Route } from '../types'
 
-type AnalysisTab = 'routes' | 'airlines' | 'lead-time' | 'heatmap'
+type AnalysisTab = 'trend' | 'inflation' | 'components' | 'routes'
 
 const TABS: { key: AnalysisTab; label: string }[] = [
-  { key: 'routes', label: 'Routes' },
-  { key: 'airlines', label: 'Airlines' },
-  { key: 'lead-time', label: 'Lead Time' },
-  { key: 'heatmap', label: 'Heatmap' },
+  { key: 'trend', label: 'Index Trend' },
+  { key: 'inflation', label: 'Inflation' },
+  { key: 'components', label: 'CPI Components' },
+  { key: 'routes', label: 'Route Basket' },
 ]
 
 export default function Analysis() {
-  const [tab, setTab] = useState<AnalysisTab>('routes')
+  const [tab, setTab] = useState<AnalysisTab>('trend')
 
   return (
     <div>
-      <PageHeader title="Analysis" subtitle="Fare trends, contributions, and pricing dynamics" />
+      <PageHeader
+        title="Analysis"
+        subtitle="MoSPI CPI airfare analysis · base 2024=100"
+      />
       <div className="flex border-b border-slate-200 mb-6">
         {TABS.map((t) => (
           <button
@@ -35,403 +37,211 @@ export default function Analysis() {
           </button>
         ))}
       </div>
+      {tab === 'trend' && <TrendTab />}
+      {tab === 'inflation' && <InflationTab />}
+      {tab === 'components' && <ComponentsTab />}
       {tab === 'routes' && <RoutesTab />}
-      {tab === 'airlines' && <AirlinesTab />}
-      {tab === 'lead-time' && <LeadTimeTab />}
-      {tab === 'heatmap' && <HeatmapTab />}
+    </div>
+  )
+}
+
+// Tab components -----------------------------------------------------------
+
+function TrendTab() {
+  const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=24')
+
+  if (trend.loading) return <LoadingState label="Loading CPI trend..." />
+  if (trend.error) return <ErrorState message={trend.error} />
+
+  const data = trend.data?.series ?? []
+  if (data.length === 0) {
+    return (
+      <Card>
+        <EmptyState message="No MoSPI CPI data available yet. The backend fetches it from esankhyiki.mospi.gov.in shortly after startup." />
+      </Card>
+    )
+  }
+
+  return (
+    <Card title="Airfare CPI index over time">
+      <p className="text-xs text-muted mb-3">
+        Monthly values of code 07.3.3.1 (Passenger transport by air, domestic) reported by MoSPI.
+      </p>
+      <ResponsiveContainer width="100%" height={340}>
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+          <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} />
+          <Tooltip />
+          <Legend />
+          <Line type="monotone" dataKey="airfare_index" stroke="#1d4ed8" strokeWidth={2} dot={{ r: 3 }} name="Airfare CPI" />
+          <Line type="monotone" dataKey="transport_index" stroke="#64748b" strokeWidth={1} dot={{ r: 2 }} name="Transport CPI" />
+          <Line type="monotone" dataKey="general_index" stroke="#94a3b8" strokeWidth={1} dot={{ r: 2 }} name="General CPI" />
+        </LineChart>
+      </ResponsiveContainer>
+    </Card>
+  )
+}
+
+function InflationTab() {
+  const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=24')
+
+  if (trend.loading) return <LoadingState label="Loading inflation data..." />
+  if (trend.error) return <ErrorState message={trend.error} />
+
+  const data = (trend.data?.series ?? []).filter((p) => p.inflation_yoy !== null)
+  if (data.length === 0) {
+    return (
+      <Card>
+        <EmptyState message="Year-over-year inflation figures will appear once MoSPI data is fetched." />
+      </Card>
+    )
+  }
+
+  const chart = data.map((p) => ({ period: p.period, inflation_yoy: p.inflation_yoy as number }))
+
+  return (
+    <Card title="Year-over-year airfare inflation (%)">
+      <p className="text-xs text-muted mb-3">
+        Airfare CPI 07.3.3.1 inflation vs the same month a year earlier.
+      </p>
+      <ResponsiveContainer width="100%" height={320}>
+        <BarChart data={chart}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} unit="%" />
+          <Tooltip formatter={(v: number) => [`${v.toFixed(2)}%`, 'YoY inflation']} />
+          <Bar dataKey="inflation_yoy" radius={[3, 3, 0, 0]}>
+            {chart.map((d, i) => (
+              <Cell key={i} fill={d.inflation_yoy >= 0 ? '#dc2626' : '#16a34a'} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </Card>
+  )
+}
+
+function ComponentsTab() {
+  const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=12')
+
+  if (trend.loading) return <LoadingState label="Loading component comparison..." />
+  if (trend.error) return <ErrorState message={trend.error} />
+
+  const data = trend.data?.series ?? []
+  if (data.length === 0) {
+    return (
+      <Card>
+        <EmptyState message="Component comparison will appear once MoSPI data is fetched." />
+      </Card>
+    )
+  }
+
+  return (
+    <div>
+      <Card className="mb-6">
+        <p className="text-[11px] text-muted mb-3">
+          All indices share base year 2024=100. The gap between airfare and general CPI shows
+          how much faster (or slower) airfares are rising vs the headline rate.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-muted border-b border-slate-200">
+                <th className="py-2">Period</th>
+                <th className="py-2 text-right">Airfare CPI</th>
+                <th className="py-2 text-right">Transport CPI</th>
+                <th className="py-2 text-right">General CPI</th>
+                <th className="py-2 text-right">Airfare vs General</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((p) => {
+                const gap =
+                  p.general_index && p.general_index > 0
+                    ? ((p.airfare_index - p.general_index) / p.general_index) * 100
+                    : null
+                return (
+                  <tr key={p.period} className="border-b border-slate-100">
+                    <td className="py-2 font-medium">{p.period}</td>
+                    <td className="py-2 text-right">{p.airfare_index.toFixed(2)}</td>
+                    <td className="py-2 text-right text-muted">
+                      {p.transport_index !== null ? p.transport_index.toFixed(2) : '\u2014'}
+                    </td>
+                    <td className="py-2 text-right text-muted">
+                      {p.general_index !== null ? p.general_index.toFixed(2) : '\u2014'}
+                    </td>
+                    <td className={`py-2 text-right font-medium ${gap !== null && gap > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '\u2014'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card>
+        <p className="text-xs text-muted">
+          Source: MoSPI Consolidated CPI, esankhyiki.mospi.gov.in. Airfare component code 07.3.3.1.
+        </p>
+      </Card>
     </div>
   )
 }
 
 function RoutesTab() {
-  const indexQuery = useApiQuery<IndexResult>('/index/current')
-  const [selected, setSelected] = useState<string | null>(null)
-
-  const routeFares = indexQuery.data?.route_fares ?? {}
-  const contributions = indexQuery.data?.route_contributions ?? {}
-  const chartData = useMemo(
-    () =>
-      Object.entries(routeFares)
-        .map(([route, d]) => ({
-          route,
-          change_pct: (d.relative - 1) * 100,
-          weight: d.weight,
-          contribution: contributions[route] ?? 0,
-          base_fare: d.base_period_fare,
-          current_fare: d.as_of_period_fare,
-          relative: d.relative,
-        }))
-        .sort((a, b) => b.change_pct - a.change_pct),
-    [routeFares, contributions],
-  )
-
-  if (indexQuery.loading) return <LoadingState label="Loading route analysis..." />
-  if (indexQuery.error) return <ErrorState message={indexQuery.error} />
-  if (!indexQuery.data) return null
-
-  const detail = selected ? chartData.find((d) => d.route === selected) : null
-
-  return (
-    <div>
-      <Card title="Fare change by route (%)" className="mb-2">
-        <p className="text-[11px] text-muted mb-3">
-          Raw percentage change in median fare per route (current period vs base period). This is <em>not</em> weighted.
-          The contribution to the index is shown below the chart.
-        </p>
-        <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 26)}>
-          <BarChart data={chartData} layout="vertical" margin={{ left: 24 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis type="number" tick={{ fontSize: 12 }} unit="%" />
-            <YAxis dataKey="route" type="category" width={70} tick={{ fontSize: 12 }} />
-            <Tooltip
-              formatter={(value: number, name: string) => {
-                if (name === 'change_pct') return [`${value.toFixed(2)}%`, 'Fare change']
-                return [value, name]
-              }}
-            />
-            <Bar
-              dataKey="change_pct"
-              onClick={(d: any) => setSelected(d.route)}
-              cursor="pointer"
-              radius={[0, 3, 3, 0]}
-            >
-              {chartData.map((d) => (
-                <Cell key={d.route} fill={d.change_pct >= 0 ? '#dc2626' : '#16a34a'} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
-
-      <Card className="mb-6">
-        <p className="text-[11px] text-muted mb-3">
-          <span className="font-medium text-ink">How to read:</span>{' '}
-          <strong>Fare change</strong> = raw % price move per route.{' '}
-          <strong>Contribution</strong> = how much that route moved the overall index (Fare change &times; Weight).
-          Sum of all contributions ≈ {indexQuery.data.change_from_base_pct.toFixed(2)}% (total index change).
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-muted border-b border-slate-200">
-                <th className="py-2">Route</th>
-                <th className="py-2 text-right">Weight</th>
-                <th className="py-2 text-right">Base &rarr; Current</th>
-                <th className="py-2 text-right">Fare change</th>
-                <th className="py-2 text-right">Contribution</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chartData.map((d) => (
-                <tr
-                  key={d.route}
-                  className={`border-b border-slate-100 cursor-pointer transition ${selected === d.route ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
-                  onClick={() => setSelected(selected === d.route ? null : d.route)}
-                >
-                  <td className="py-2 font-medium">{d.route}</td>
-                  <td className="py-2 text-right text-muted">{(d.weight * 100).toFixed(1)}%</td>
-                  <td className="py-2 text-right text-muted">
-                    {`\u20b9${d.base_fare.toLocaleString()}`} &rarr; {`\u20b9${d.current_fare.toLocaleString()}`}
-                  </td>
-                  <td className={`py-2 text-right font-medium ${d.change_pct >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                    {d.change_pct >= 0 ? '+' : ''}{d.change_pct.toFixed(2)}%
-                  </td>
-                  <td className={`py-2 text-right font-medium ${d.contribution >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                    {d.contribution >= 0 ? '+' : ''}{d.contribution.toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-xs text-muted mt-2">Click a row to expand route detail below.</p>
-      </Card>
-
-      {detail && selected && (
-        <Card title={`Route detail \u2014 ${selected}`}>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-            <div>
-              <div className="text-xs text-muted uppercase">Basket weight</div>
-              <div className="font-semibold">{(detail.weight * 100).toFixed(1)}%</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted uppercase">Base fare</div>
-              <div className="font-semibold">{`\u20b9${detail.base_fare.toLocaleString()}`}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted uppercase">Current fare</div>
-              <div className="font-semibold">{`\u20b9${detail.current_fare.toLocaleString()}`}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted uppercase">Price relative</div>
-              <div className="font-semibold">{detail.relative.toFixed(4)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted uppercase">Index contribution</div>
-              <div className={`font-semibold ${detail.contribution >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                {detail.contribution >= 0 ? '+' : ''}{detail.contribution.toFixed(3)}
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 p-2 bg-slate-50 rounded text-[11px] text-muted">
-            Calculation: {`\u20b9${detail.base_fare.toLocaleString()}`} &rarr; {`\u20b9${detail.current_fare.toLocaleString()}`} = {detail.change_pct >= 0 ? '+' : ''}{detail.change_pct.toFixed(2)}% raw change.
-            Weighted contribution = {(detail.weight * 100).toFixed(1)}% weight &times; {detail.change_pct >= 0 ? '+' : ''}{detail.change_pct.toFixed(2)}% = {detail.contribution >= 0 ? '+' : ''}{detail.contribution.toFixed(3)}.
-          </div>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-function AirlinesTab() {
-  interface AirlineRow {
-    airline: string
-    valid_observations: number
-    median_fare: number
-    observation_share_pct: number
-  }
-
-  const airlinesQuery = useApiQuery<{ airlines: AirlineRow[] }>('/analytics/airlines')
-  const indexQuery = useApiQuery<IndexResult>('/index/current')
-
-  if (airlinesQuery.loading) return <LoadingState label="Loading airline analysis..." />
-  if (airlinesQuery.error) return <ErrorState message={airlinesQuery.error} />
-
-  const airlines = airlinesQuery.data?.airlines ?? []
-  const contributions = indexQuery.data?.airline_contributions ?? {}
-
-  if (airlines.length === 0) return <EmptyState message="No airline data available yet." />
-
-  return (
-    <div>
-      <Card title="Median fare by airline" className="mb-6">
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={airlines}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="airline" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={60} />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip formatter={(v: number) => `\u20b9${v.toLocaleString()}`} />
-            <Bar dataKey="median_fare" fill="#1d4ed8" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
-
-      <Card title="Airline comparison">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-muted border-b border-slate-200">
-              <th className="py-2">Airline</th>
-              <th className="py-2 text-right">Observations</th>
-              <th className="py-2 text-right">Share</th>
-              <th className="py-2 text-right">Median fare</th>
-              <th className="py-2 text-right">Index contrib.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {airlines.map((a) => {
-              const contrib = contributions[a.airline]
-              return (
-                <tr key={a.airline} className="border-b border-slate-100">
-                  <td className="py-2 font-medium">{a.airline}</td>
-                  <td className="py-2 text-right">{a.valid_observations.toLocaleString()}</td>
-                  <td className="py-2 text-right">{a.observation_share_pct.toFixed(1)}%</td>
-                  <td className="py-2 text-right">{`\u20b9${a.median_fare.toLocaleString()}`}</td>
-                  <td className={`py-2 text-right font-medium ${contrib !== undefined ? (contrib >= 0 ? 'text-red-600' : 'text-emerald-600') : 'text-muted'}`}>
-                    {contrib !== undefined ? contrib.toFixed(3) : '\u2014'}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        <p className="text-xs text-muted mt-3">
-          Index contribution is a transparency proxy weighted by each airline's observed share of valid
-          fare quotes in the current period.
-        </p>
-      </Card>
-    </div>
-  )
-}
-
-function LeadTimeTab() {
-  interface LeadTimePoint {
-    booking_window_days: number
-    median_fare: number
-  }
-  interface LeadTimeResponse {
-    origin: string
-    destination: string
-    points: LeadTimePoint[]
-    pct_increase_last_minute_vs_cheapest: number | null
-  }
-  interface RouteRanking {
-    routes: Array<{ route: string; t1_vs_t45_pct_increase: number }>
-  }
-
   const routesQuery = useApiQuery<Route[]>('/routes')
-  const rankingQuery = useApiQuery<RouteRanking>('/analytics/lead-time/all-routes-summary')
+
+  if (routesQuery.loading) return <LoadingState label="Loading route basket..." />
+  if (routesQuery.error) return <ErrorState message={routesQuery.error} />
 
   const routes = routesQuery.data ?? []
-  const [selectedRoute, setSelectedRoute] = useState('')
-
-  const activeRoute = selectedRoute || (routes[0] ? `${routes[0].origin}-${routes[0].destination}` : '')
-  const [origin, destination] = activeRoute ? activeRoute.split('-') : ['', '']
-
-  const leadTimeQuery = useApiQuery<LeadTimeResponse>(
-    origin && destination ? `/analytics/lead-time?origin=${origin}&destination=${destination}` : null,
-    [origin, destination],
-  )
+  const sorted = useMemo(() => [...routes].sort((a, b) => b.weight - a.weight), [routes])
 
   return (
     <div>
-      <Card title="Fare vs booking window" className="mb-6">
-        <div className="mb-4">
-          <select
-            value={activeRoute}
-            onChange={(e) => setSelectedRoute(e.target.value)}
-            className="text-sm border border-slate-300 rounded px-2 py-1.5"
-          >
-            {routes.map((r) => (
-              <option key={r.id} value={`${r.origin}-${r.destination}`}>
-                {r.origin}-{r.destination}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {leadTimeQuery.loading && <LoadingState />}
-        {leadTimeQuery.error && <ErrorState message={leadTimeQuery.error} />}
-        {leadTimeQuery.data && leadTimeQuery.data.points.length > 0 ? (
-          <>
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={[...leadTimeQuery.data.points].sort((a, b) => b.booking_window_days - a.booking_window_days)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="booking_window_days" tickFormatter={(v) => `T+${v}`} tick={{ fontSize: 12 }} reversed />
-                <YAxis tick={{ fontSize: 12 }} domain={['auto', 'auto']} />
-                <Tooltip labelFormatter={(v) => `T+${v}`} formatter={(v: number) => [`\u20b9${v.toLocaleString()}`, 'Median fare']} />
-                <Line type="monotone" dataKey="median_fare" stroke="#1d4ed8" strokeWidth={2} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-            {leadTimeQuery.data.pct_increase_last_minute_vs_cheapest !== null && (
-              <p className="text-sm text-muted mt-2">
-                Booking at T+1 costs{' '}
-                <span className="font-semibold text-red-600">
-                  {leadTimeQuery.data.pct_increase_last_minute_vs_cheapest.toFixed(1)}%
-                </span>{' '}
-                more than the cheapest window on this route.
-              </p>
-            )}
-          </>
+      <Card className="mb-6">
+        <p className="text-[11px] text-muted mb-3">
+          Domestic routes covered by the MoSPI CPI airfare component (07.3.3.1).
+          Weight = share of all-India domestic air passenger traffic (DGCA).
+        </p>
+        {sorted.length === 0 ? (
+          <EmptyState message="Route basket is empty." />
         ) : (
-          !leadTimeQuery.loading && <EmptyState message="No valid data for this route yet." />
-        )}
-      </Card>
-
-      <Card title="Routes with the sharpest last-minute markup (T+1 vs T+45)">
-        {rankingQuery.loading && <LoadingState />}
-        {rankingQuery.data && rankingQuery.data.routes.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-muted border-b border-slate-200">
-                <th className="py-2">Route</th>
-                <th className="py-2 text-right">T+1 vs T+45 markup</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rankingQuery.data.routes.slice(0, 10).map((r) => (
-                <tr key={r.route} className="border-b border-slate-100">
-                  <td className="py-2 font-medium">{r.route}</td>
-                  <td className="py-2 text-right text-red-600 font-medium">+{r.t1_vs_t45_pct_increase.toFixed(1)}%</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted border-b border-slate-200">
+                  <th className="py-2">Route</th>
+                  <th className="py-2 text-right">Weight</th>
+                  <th className="py-2 text-right">Share</th>
+                  <th className="py-2">Distance tier</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          !rankingQuery.loading && <EmptyState message="Not enough data yet to rank routes." />
-        )}
-      </Card>
-    </div>
-  )
-}
-
-function HeatmapTab() {
-  const indexQuery = useApiQuery<IndexResult>('/index/current')
-
-  if (indexQuery.loading) return <LoadingState label="Building heatmap..." />
-  if (indexQuery.error) return <ErrorState message={indexQuery.error} />
-  if (!indexQuery.data) return null
-
-  const routeFares = indexQuery.data.route_fares
-  const cities = new Set<string>()
-  Object.keys(routeFares).forEach((r) => {
-    const [o, d] = r.split('-')
-    cities.add(o)
-    cities.add(d)
-  })
-  const cityList = Array.from(cities).sort()
-
-  if (cityList.length === 0) {
-    return <EmptyState message="No route data available to build a heatmap yet." />
-  }
-
-  return (
-    <div>
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="text-xs border-collapse">
-            <thead>
-              <tr>
-                <th className="p-2"></th>
-                {cityList.map((c) => (
-                  <th key={c} className="p-2 font-semibold text-muted">
-                    {c}
-                  </th>
+              </thead>
+              <tbody>
+                {sorted.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-100">
+                    <td className="py-2 font-medium">
+                      {r.origin}-{r.destination}
+                    </td>
+                    <td className="py-2 text-right">{(r.weight * 100).toFixed(2)}%</td>
+                    <td className="py-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="h-2 w-24 bg-slate-100 rounded overflow-hidden">
+                          <div className="h-2 bg-blue-600" style={{ width: `${Math.min(100, r.weight * 500)}%` }} />
+                        </div>
+                        <span className="text-muted text-xs">{(r.weight * 100).toFixed(1)}%</span>
+                      </div>
+                    </td>
+                    <td className="py-2 text-right text-muted">{r.distance_tier ?? '\u2014'}</td>
+                  </tr>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {cityList.map((origin) => (
-                <tr key={origin}>
-                  <td className="p-2 font-semibold text-muted">{origin}</td>
-                  {cityList.map((dest) => {
-                    if (origin === dest) return <td key={dest} className="p-2 bg-slate-50" />
-                    const forward = routeFares[`${origin}-${dest}`]
-                    const backward = routeFares[`${dest}-${origin}`]
-                    const detail = forward ?? backward
-                    if (!detail) return <td key={dest} className="p-2 bg-slate-50 text-center text-slate-300">{'\u00b7'}</td>
-                    const changePct = (detail.relative - 1) * 100
-                    return (
-                      <td
-                        key={dest}
-                        className="p-2 text-center font-medium rounded"
-                        style={{ backgroundColor: colorForChange(changePct) }}
-                        title={`${origin}-${dest}: ${changePct.toFixed(2)}%`}
-                      >
-                        {changePct.toFixed(1)}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex items-center gap-2 mt-4 text-xs text-muted">
-          <span>Cheaper</span>
-          <div className="h-2 w-32 rounded" style={{ background: 'linear-gradient(to right, rgba(22,163,74,0.77), white, rgba(220,38,38,0.77))' }} />
-          <span>More expensive</span>
-        </div>
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   )
-}
-
-function colorForChange(pct: number): string {
-  const clamped = Math.max(-15, Math.min(15, pct))
-  if (clamped >= 0) {
-    const intensity = clamped / 15
-    return `rgba(220, 38, 38, ${0.12 + intensity * 0.65})`
-  }
-  const intensity = -clamped / 15
-  return `rgba(22, 163, 74, ${0.12 + intensity * 0.65})`
 }

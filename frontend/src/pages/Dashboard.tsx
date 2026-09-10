@@ -1,7 +1,6 @@
-import { useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts'
 import { useApiQuery } from '../hooks/useApiQuery'
-import { PageHeader, StatCard, Card, LoadingState, ErrorState, SourceBadge } from '../components/ui'
+import { PageHeader, StatCard, Card, LoadingState, ErrorState, SourceBadge, EmptyState } from '../components/ui'
 import type { CpiAirfareIndex, CpiAirfareTrend } from '../types'
 
 export default function Dashboard() {
@@ -14,6 +13,21 @@ export default function Dashboard() {
 
   const data = current.data
   const trendData = trend.data?.series ?? []
+
+  if (!data.available) {
+    return (
+      <div>
+        <PageHeader
+          title="Airfare Price Index"
+          subtitle="MoSPI CPI 07.3.3.1 · Base 2024=100"
+          action={<SourceBadge sourceType="PUBLIC_DATASET" />}
+        />
+        <Card>
+          <EmptyState message="Awaiting MoSPI CPI airfare data. The backend fetches it from esankhyiki.mospi.gov.in shortly after startup." />
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -28,7 +42,7 @@ export default function Dashboard() {
         <div className="text-xs font-bold uppercase tracking-wide opacity-80 mb-1">
           Current Airfare CPI Index
         </div>
-        <div className="text-3xl font-bold">{data.airfare_index.toFixed(2)}</div>
+        <div className="text-3xl font-bold">{data.airfare_index!.toFixed(2)}</div>
         <div className="text-xs opacity-80 mt-1">
           Period: {data.period} · Source: MoSPI (esankhyiki.mospi.gov.in)
         </div>
@@ -38,7 +52,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <StatCard
           label="Airfare CPI"
-          value={data.airfare_index.toFixed(2)}
+          value={data.airfare_index!.toFixed(2)}
           sub={`Code ${data.cpi_code || '07.3.3.1'}`}
         />
         <StatCard

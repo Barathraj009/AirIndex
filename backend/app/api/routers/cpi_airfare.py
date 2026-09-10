@@ -3,11 +3,14 @@ CPI Airfare Index API — serves MoSPI published data directly.
 
 This is the PRIMARY endpoint for the Airfare Price Index.
 The MoSPI CPI code 07.3.3.1 IS the official airfare price index.
+
+All endpoints return 200 even when the table is empty (with
+`available: false`) so the UI can show a clean "awaiting data" state
+instead of an error banner during first-run bootstrap.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.core.database import get_db
 from app.api.deps import require_permission
@@ -29,12 +32,22 @@ def get_current_airfare_index(
     )
 
     if not latest:
-        raise HTTPException(
-            status_code=404,
-            detail="No CPI airfare data available. Run ingestion first."
-        )
+        return {
+            "available": False,
+            "period": None,
+            "airfare_index": None,
+            "transport_index": None,
+            "general_index": None,
+            "inflation_yoy": None,
+            "base_year": "2024=100",
+            "source": "MOSPI_CPI",
+            "source_url": "https://esankhyiki.mospi.gov.in",
+            "cpi_code": "07.3.3.1",
+            "fetched_at": None,
+        }
 
     return {
+        "available": True,
         "period": latest.period,
         "airfare_index": latest.airfare_index,
         "transport_index": latest.transport_index,
@@ -43,6 +56,7 @@ def get_current_airfare_index(
         "base_year": latest.base_year,
         "source": latest.source,
         "source_url": latest.source_url,
+        "cpi_code": latest.cpi_code,
         "fetched_at": latest.fetched_at.isoformat() if latest.fetched_at else None,
     }
 
@@ -62,10 +76,13 @@ def get_airfare_trend(
     )
 
     if not records:
-        raise HTTPException(
-            status_code=404,
-            detail="No CPI airfare data available."
-        )
+        return {
+            "available": False,
+            "series": [],
+            "base_year": "2024=100",
+            "source": "MOSPI_CPI",
+            "cpi_code": "07.3.3.1",
+        }
 
     trend = []
     for rec in reversed(records):  # Chronological order
@@ -78,6 +95,7 @@ def get_airfare_trend(
         })
 
     return {
+        "available": True,
         "series": trend,
         "base_year": "2024=100",
         "source": "MOSPI_CPI",
@@ -97,7 +115,10 @@ def get_available_periods(
         .all()
     )
 
-    return {"periods": [p[0] for p in periods]}
+    return {
+        "available": len(periods) > 0,
+        "periods": [p[0] for p in periods],
+    }
 
 
 @router.get("/comparison")
@@ -114,7 +135,12 @@ def get_cpi_comparison(
     )
 
     if not records:
-        raise HTTPException(status_code=404, detail="No CPI data available.")
+        return {
+            "available": False,
+            "series": [],
+            "base_year": "2024=100",
+            "note": "All indices use base year 2024=100",
+        }
 
     comparison = []
     for rec in reversed(records):
@@ -126,6 +152,7 @@ def get_cpi_comparison(
         })
 
     return {
+        "available": True,
         "series": comparison,
         "base_year": "2024=100",
         "note": "All indices use base year 2024=100",

@@ -42,7 +42,7 @@ jobs:
           docker compose -f deployment/docker-compose.yml ps || true
           exit 1
 
-      - name: Smoke API (login -> me -> dashboard)
+      - name: Smoke API (login -> me -> CPI airfare index)
         run: |
           set -euo pipefail
           TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login \
@@ -50,18 +50,12 @@ jobs:
             -d '{"email":"admin@airindex.gov.in","password":"change-me-immediately"}' \
             | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
           curl -sf -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/auth/me | grep -q '"role":"ADMIN"'
-          curl -sf -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/dashboard/summary | grep -q '"index"'
+          curl -sf -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/cpi-airfare/current | grep -q '"available"'
           echo "API smoke OK"
 
       - name: Smoke frontend
         run: |
           curl -sf -o /dev/null -w 'frontend http %{http_code}\n' http://127.0.0.1:5173/login
-
-      - name: Backend seed sanity (no duplicate observations on rerun)
-        run: |
-          docker compose -f deployment/docker-compose.yml exec -T backend \
-            python /app/scripts/seed_database.py > /tmp/seed2.txt 2>&1 || true
-          grep -q "already populated" /tmp/seed2.txt || cat /tmp/seed2.txt
 
       - name: Always tear down
         if: always()

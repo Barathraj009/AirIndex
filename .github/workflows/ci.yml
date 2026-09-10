@@ -157,11 +157,16 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex
         run: alembic upgrade head
-      - name: Seed demo data
+      - name: Bootstrap reference data (routes, admin, config)
         working-directory: backend
         env:
           DATABASE_URL: postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex
-        run: python ../scripts/seed_database.py
+        run: python ../scripts/bootstrap_reference.py
+      - name: Populate MoSPI CPI airfare index (real data)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex
+        run: python ../scripts/populate_cpi.py || echo "CPI fetch failed in CI (treated as warning); pages render waiting states"
       - name: Start backend (uvicorn) + production preview (vite)
         run: |
           cd "$GITHUB_WORKSPACE/backend"
