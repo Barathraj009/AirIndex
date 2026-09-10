@@ -232,3 +232,25 @@ export interface CpiAirfareTrend {
   source: string
   cpi_code: string
 }
+
+export interface CpiForecastPoint {
+  period: string
+  forecast_value: number
+  lower_80: number
+  upper_80: number
+  lower_95: number
+  upper_95: number
+  trend_direction: 'UPWARD' | 'DOWNWARD' | 'STABLE'
+}
+
+export interface CpiForecastResult {
+  available: boolean
+  method: string
+  historical_periods_used: number
+  last_observed_period?: string
+  monthly_drift_rate?: number
+  projected_horizon_growth_pct?: number
+  forecast_points: CpiForecastPoint[]
+  note?: string
+  base_year?: string
+}

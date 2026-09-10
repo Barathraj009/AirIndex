@@ -19,6 +19,46 @@ from app.models.cpi import CpiAirfareIndex
 router = APIRouter(prefix="/api/cpi-airfare", tags=["cpi-airfare"])
 
 
+@router.get("/forecast")
+def get_airfare_forecast(
+    steps: int = 6,
+    months: int = 36,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("view_dashboard"))
+):
+    """Holt-Winters projection of the MoSPI airfare CPI series.
+
+    Clearly a *statistical projection*: it is computed from observed data,
+    never merged with official values.  Shown to viewers with an explicit
+    forecast label.
+    """
+    from app.services.cpi_forecaster import forecast_cpi_series
+
+    records = (
+        db.query(CpiAirfareIndex)
+        .order_by(CpiAirfareIndex.period.desc())
+        .limit(max(months, steps + 1))
+        .all()
+    )
+
+    if not records:
+        return {
+            "available": False,
+            "method": "HOLT_LINEAR",
+            "note": "Index data is not available yet.",
+            "forecast_points": [],
+        }
+
+    series = [
+        {"period": rec.period, "airfare_index": rec.airfare_index}
+        for rec in reversed(records)  # Chronological order
+    ]
+
+    result = forecast_cpi_series(series, forecast_steps=steps)
+    result["base_year"] = "2024=100"
+    return result
+
+
 @router.get("/current")
 def get_current_airfare_index(
     db: Session = Depends(get_db),

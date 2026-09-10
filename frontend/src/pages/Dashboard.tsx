@@ -1,12 +1,15 @@
 import { Area, AreaChart, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts'
 import { Plane, TrendingUp, CalendarDays } from 'lucide-react'
+import { useRef } from 'react'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, StatCard, Card, LoadingState, ErrorState, EmptyState, TrendPill } from '../components/ui'
+import { exportChartAsPNG, downloadCSV } from '../utils/exportChart'
 import type { CpiAirfareIndex, CpiAirfareTrend } from '../types'
 
 export default function Dashboard() {
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
   const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=24')
+  const chartRef = useRef<HTMLDivElement>(null)
 
   if (current.loading) return <LoadingState label="Loading CPI data..." />
   if (current.error) return <ErrorState message={current.error} onRetry={current.refetch} />
@@ -98,30 +101,59 @@ export default function Dashboard() {
 
       {/* Trend chart */}
       {trendData.length > 0 && (
-        <Card title="Index Trend" action={<span className="text-[11px] text-muted">last {trendData.length} months</span>}>
+        <Card
+          title="Index Trend"
+          action={
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted">last {trendData.length} months</span>
+              <button
+                onClick={() => chartRef.current && exportChartAsPNG(chartRef.current, 'airfare-index-trend.png')}
+                title="Download as PNG"
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-700 hover:border-brand-500/40 transition-colors"
+              >
+                PNG
+              </button>
+              <button
+                onClick={() =>
+                  downloadCSV(
+                    'airfare-index-trend.csv',
+                    ['Period', 'Airfare CPI', 'Transport CPI', 'YoY %'],
+                    trendData.map((p) => [p.period, p.airfare_index, p.transport_index, p.inflation_yoy])
+                  )
+                }
+                title="Download as CSV"
+                className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-700 hover:border-brand-500/40 transition-colors"
+              >
+                CSV
+              </button>
+            </div>
+          }
+        >
           <p className="pb-3 text-xs text-muted">
             Monthly airfare index contrasted with the wider transport index.
           </p>
-          <ResponsiveContainer width="100%" height={340}>
-            <AreaChart data={trendData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="gradAirfare" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#1471e8" stopOpacity={0.18} />
-                  <stop offset="100%" stopColor="#1471e8" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="period" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} />
-              <Tooltip
-                contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12 }}
-                labelStyle={{ color: '#0f172a', fontWeight: 600 }}
-              />
-              <Legend />
-              <Area type="monotone" dataKey="airfare_index" name="Airfare CPI" stroke="#1471e8" strokeWidth={2.5} fill="url(#gradAirfare)" dot={{ r: 2.5, fill: '#1471e8' }} activeDot={{ r: 4 }} />
-              <Area type="monotone" dataKey="transport_index" name="Transport CPI" stroke="#0ea5e9" strokeOpacity={0.6} strokeWidth={1.5} fill="none" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div ref={chartRef}>
+            <ResponsiveContainer width="100%" height={340}>
+              <AreaChart data={trendData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="gradAirfare" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#1471e8" stopOpacity={0.18} />
+                    <stop offset="100%" stopColor="#1471e8" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="period" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                <Tooltip
+                  contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12 }}
+                  labelStyle={{ color: '#0f172a', fontWeight: 600 }}
+                />
+                <Legend />
+                <Area type="monotone" dataKey="airfare_index" name="Airfare CPI" stroke="#1471e8" strokeWidth={2.5} fill="url(#gradAirfare)" dot={{ r: 2.5, fill: '#1471e8' }} activeDot={{ r: 4 }} />
+                <Area type="monotone" dataKey="transport_index" name="Transport CPI" stroke="#0ea5e9" strokeOpacity={0.6} strokeWidth={1.5} fill="none" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </Card>
       )}
     </div>
