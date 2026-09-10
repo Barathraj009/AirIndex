@@ -13,20 +13,9 @@ from playwright.sync_api import sync_playwright
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5173"
 
 ROUTES = [
-    ("/", "Overview"),
-    ("/index", "Airfare Price Index"),
-    ("/routes", "Route Analysis"),
-    ("/heatmap", "Sector Heatmap"),
-    ("/lead-time", "Lead-Time Analysis"),
-    ("/airlines", "Airline Analysis"),
-    ("/explorer", "Data Explorer"),
-    ("/quality", "Data Quality"),
-    ("/scraping", "Scraping Monitor"),
-    ("/backtesting", "Backtesting"),
-    ("/cpi-simulator", "CPI Augmentation"),
-    ("/geospatial-map", "Geospatial Map"),
-    ("/methodology", "Methodology"),
-    ("/api-docs", "API Docs"),
+    ("/", "Dashboard"),
+    ("/analysis", "Analysis"),
+    ("/data", "Data"),
     ("/admin", "Admin"),
 ]
 
@@ -52,8 +41,6 @@ def run_walk():
 
         page.goto(f"{BASE}/login", wait_until="networkidle")
         page.locator("input#email").fill("admin@airindex.gov.in")
-        page.locator("button[type='submit']").click()
-        page.wait_for_selector("input#password", state="visible", timeout=5000)
         page.locator("input#password").fill("change-me-immediately")
         page.locator("button[type='submit']").click()
         page.wait_for_timeout(3500)
@@ -66,6 +53,7 @@ def run_walk():
             total += 1
             console_errors.clear()
             bad_responses.clear()
+            body = ""
             try:
                 page.goto(f"{BASE}{path}", wait_until="networkidle", timeout=15000)
                 page.wait_for_timeout(1800)
@@ -85,6 +73,7 @@ def run_walk():
             except Exception as e:  # noqa: BLE001
                 FAIL_CODE = 1
                 status = "FAIL(exception)"
+                h2s = 0
                 print(f"      exception: {str(e)[:200]}")
             print(f"{status}  {path:16s} {label:22s} body={len(body):>5} h2+={h2s}")
 

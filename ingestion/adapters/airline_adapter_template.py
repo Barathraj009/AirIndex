@@ -17,7 +17,7 @@ Why this ships as a template rather than a finished scraper
 - Airline booking-flow HTML/DOM structure changes frequently and differs
   per airline; hardcoding selectors here would be stale on day one and
   is exactly the kind of site-specific reverse-engineering that needs a
-  human on the SIH team to review against each airline's current
+  human on the team to review against each airline's current
   robots.txt and Terms of Service before it is ever pointed at a live
   site.
 - **This was actually checked, not assumed**: see

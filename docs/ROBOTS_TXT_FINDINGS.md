@@ -1,4 +1,4 @@
-# Robots.txt findings — airlines named in PS 26056
+# Robots.txt findings — major Indian airlines
 
 Checked live (via web search + fetch, not simulated) on 2026-09-05.
 This directly informs which paths `airline_adapter_template.py`
@@ -93,7 +93,7 @@ adapter would need** (their booking/search-results flow). This is a
 real, structural finding, not a hypothetical caveat:
 
 - It strongly suggests the "automated web scraping of airline
-  portals" approach described in PS 26056 will hit the same wall on
+  portals" approach will hit the same wall on
   every major carrier's own site, since booking flows are precisely
   what airlines have the strongest incentive to keep bot-free (fraud,
   scalping, server load from fare-shopping bots).

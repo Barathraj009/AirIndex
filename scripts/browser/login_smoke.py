@@ -31,15 +31,10 @@ def check(name, ok, detail=""):
 
 
 def _login(page):
-    """Drive the two-step login form: email -> continue -> password -> sign in."""
+    """Drive the single-form login: fill email + password, submit once."""
     page.goto(f"{BASE}/login", wait_until="networkidle")
 
-    # Step 1: email
     page.locator("input#email").fill(EMAIL)
-    page.locator("button[type='submit']").click()
-    page.wait_for_selector("input#password", state="visible", timeout=5000)
-
-    # Step 2: password (for existing users the username field is hidden)
     page.locator("input#password").fill(PASSWORD)
     page.locator("button[type='submit']").click()
     page.wait_for_timeout(3000)

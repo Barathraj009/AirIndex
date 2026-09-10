@@ -80,7 +80,7 @@ The route weights currently shipped in `demo_data_generator.ROUTE_BASKET`
 are **illustrative**, loosely proportional to approximate trunk-route
 traffic share — they are not official MoSPI/DGCA passenger-traffic
 weights. Before any real presentation of index *levels* as
-policy-relevant, the SIH team should source actual route-level traffic
+policy-relevant, the team should source actual route-level traffic
 share data (DGCA publishes domestic sector-wise passenger data at
 https://www.dgca.gov.in — see "आंकड़े और रिपोर्ट" → "घरेलू विमान परिवहन" →
 "मासिक आंकड़े") to calibrate `route_weights` properly. That specific

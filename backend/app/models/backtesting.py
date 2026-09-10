@@ -1,6 +1,6 @@
 """Reference data for backtesting (spec section 8). `dataset_name`
 distinguishes a real sourced dataset (e.g. "DGCA_MONTHLY_AVG", to be
-populated by the SIH team from DGCA publications) from the
+populated by an analyst from DGCA publications) from the
 explicitly-labelled "DEMO_REFERENCE" used for demonstration. The
 backtesting router refuses to compare against anything not present in
 this table — see app/services/backtesting.run_backtest's

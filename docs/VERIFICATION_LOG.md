@@ -552,3 +552,88 @@ The app is not deployed to a public host (that is the deploy step, out
 of scope for verification); with this CI, `docker compose up` and the
 full test/browser matrix are now proven on every commit rather than only
 on this host.
+
+---
+
+## Frontend redesign — 5-page clean layout (2026-09-09)
+
+### What changed
+
+Complete frontend rebuild from 16 pages to 5 focused pages:
+
+- **Deleted**: `AirfarePriceIndex.tsx`, `AirlineAnalysis.tsx`,
+  `ApiDocs.tsx`, `Backtesting.tsx`, `CpiAugmentation.tsx`,
+  `DataExplorer.tsx`, `DataQuality.tsx`, `GeospatialMap.tsx`,
+  `LeadTimeAnalysis.tsx`, `Methodology.tsx`, `Overview.tsx`,
+  `RouteAnalysis.tsx`, `ScrapingMonitor.tsx`, `SectorHeatmap.tsx`
+  (14 files removed).
+- **New**: `Dashboard.tsx` (APIx strip + stats + trend + contributors +
+  airline snapshot), `Analysis.tsx` (4 tabs: Routes, Airlines, Lead Time,
+  Heatmap), `Data.tsx` (2 tabs: Explorer, Quality).
+- **Rewritten**: `Login.tsx` (single-step email+password form, no
+  two-step check-user flow), `Admin.tsx` (5 tabs: Routes, Sources,
+  Users, Config, Audit).
+- **Updated**: `Layout.tsx` (5-entry sidebar, role-gated Admin,
+  JWT-decoded role check, "Airfare Price Index" subtitle),
+  `App.tsx` (4 routes: `/`, `/analysis`, `/data`, `/admin`).
+
+### SIH/PS-26056 references removed
+
+All references to "SIH 2026", "PS 26056", and "Smart India Hackathon"
+removed from frontend source (`Layout.tsx`, `Login.tsx`). The README
+title still mentions it (read-only per user instruction).
+
+### Login flow simplified
+
+Old: two-step (email → check-user → credentials → login).
+New: single form (email + password → login). E2e scripts updated
+accordingly (`login_smoke.py`, `walk_pages.py`).
+
+### Route walk updated
+
+Old: 15 routes covering all legacy pages.
+New: 4 routes (`/`, `/analysis`, `/data`, `/admin`).
+`walk_pages.py` updated with new route list.
+
+### Build verification
+
+```
+$ cd frontend && npm run typecheck
+# clean, zero errors
+
+$ npm run build
+# tsc -b && vite build — 648 kB JS (chunk-size warning only)
+# dist/ built in ~5s
+```
+
+### Backend test suite (unchanged, unchanged 1 error local)
+
+```
+$ PYTHONPATH=".;./backend" python -m unittest discover -s tests -v
+Ran 71 tests in 8.155s
+FAILED (errors=1)   # test_api_integration: Postgres not running locally
+# CI with Postgres: all tests pass
+```
+
+### Pages rendered (5 total)
+
+| Route | Page | Content |
+|---|---|---|
+| `/login` | Login | Email + password form, AirIndex branding |
+| `/` | Dashboard | APIx value, trend chart, route contributors, airline snapshot |
+| `/analysis` | Analysis | Routes tab (bar chart + detail), Airlines tab (chart + table), Lead Time tab (line chart + ranking), Heatmap tab (matrix) |
+| `/data` | Data | Explorer tab (filters + table + CSV export), Quality tab (stats + outlier + dedup) |
+| `/admin` | Admin | Route weights, Data sources, Users, Index config, Audit log |
+
+### Key design decisions
+
+- Source badges on every data-derived number (LIVE/PUBLIC DATA/DEMO/UNAVAILABLE)
+- Amber demo banner on Dashboard: "Demo data — figures are simulated representative series"
+- All numbers from live API calls (no hardcoded values)
+- APIx from `/api/index/current` (never computed client-side)
+- Max 2 chart types per page (Dashboard: LineChart + CSS bars; Analysis Routes: BarChart + LineChart)
+- Skeleton/loading states via `LoadingState` component
+- 401 interceptor in `api/client.ts` clears token + redirects
+- Layout role-gates Admin via JWT payload decode
+- No modal dialogs for primary workflows
+- Color palette: slate bg, white cards, blue accent, red up, green down, amber warnings

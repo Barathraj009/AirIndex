@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AirIndex India",
-    description="Real-time Airfare Price Index for India (SIH 2026, PS 26056)",
+    description="Real-time Airfare Price Index for India",
     version="1.0.0",
     lifespan=lifespan,
 )

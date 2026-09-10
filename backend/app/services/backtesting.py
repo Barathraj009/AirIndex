@@ -3,7 +3,7 @@ AirIndex India — Backtesting metrics
 =======================================
 Computes standard forecast-accuracy metrics comparing the calculated
 APIx against a reference series (e.g. DGCA monthly average fares, once
-the SIH team sources that data, or an explicitly-labelled demonstration
+an analyst sources that data, or an explicitly-labelled demonstration
 dataset). Per spec section 8: never fabricate DGCA/historical results —
 if no reference data exists for the requested period, the caller must
 report `reference_available: False` rather than inventing numbers. This
