@@ -59,12 +59,12 @@ export default function Login() {
             <span className="bg-brand-gradient bg-clip-text text-transparent">flying in India.</span>
           </h2>
           <p className="mt-4 max-w-md text-sm leading-relaxed text-muted">
-            A continuously refreshed airfare price index built on the official MoSPI Consolidated CPI
-            air transport sub-component (code 07.3.3.1, base 2024=100).
+            A continuously refreshed airfare price index for domestic air travel
+            in India, base year 2024 = 100.
           </p>
           <div className="mt-8 space-y-3">
-            <Feature label="Official MoSPI data" detail="esankhyiki.mospi.gov.in · refreshed daily" icon={<TrendingUp size={16} />} />
-            <Feature label="Transparent methodology" detail="Route-weighted index, base 2024 = 100" icon={<ShieldCheck size={16} />} />
+            <Feature label="Official price statistics" detail="republished air-transport CPI series · updated monthly" icon={<TrendingUp size={16} />} />
+            <Feature label="Transparent methodology" detail="Route-weighted basket, base 2024 = 100" icon={<ShieldCheck size={16} />} />
           </div>
         </div>
 

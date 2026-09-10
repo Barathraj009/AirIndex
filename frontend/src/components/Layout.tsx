@@ -97,9 +97,6 @@ export default function Layout() {
                 {role ?? '--'}
               </span>
             </div>
-            <p className="mb-3 text-[11px] leading-relaxed text-muted">
-              Data sourced from the official MoSPI Consolidated CPI via esankhyiki.mospi.gov.in.
-            </p>
             <button
               onClick={handleLogout}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-xs font-medium text-slate-500 transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-600"
