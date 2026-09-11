@@ -170,7 +170,7 @@ def fetch_mospi_wpi_atf() -> List[Dict]:
             "source": "MOSPI_WPI",
             "source_url": "https://esankhyiki.mospi.gov.in",
             "wpi_code": ATF_ITEM_CODE,
-            "base_year": "2022-23=100",
+            "base_year": "2022-23",
             "fetched_at": now,
             "created_at": now,
         })
