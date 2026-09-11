@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 LAST_MOSPI_REFRESH: dict[str, dict] = {}
 
 
-def _record_mospi_outcome(source: str, error: Exception | None) -> None:
+def _record_mospi_outcome(source: str, error: Exception | None, n_records: int | None = None) -> None:
     LAST_MOSPI_REFRESH[source] = (
-        {"ok": True, "ts": time.time()}
+        {"ok": True, "ts": time.time(), "records": n_records}
         if error is None
         else {"ok": False, "ts": time.time(), "error": f"{type(error).__name__}: {error}"}
     )
@@ -42,7 +42,7 @@ def _fetch_with_retry(fetcher, source: str, retries: int = 3) -> list:
     for attempt in range(retries):
         try:
             result = fetcher()
-            _record_mospi_outcome(source, None)
+            _record_mospi_outcome(source, None, n_records=len(result))
             return result
         except Exception as exc:  # noqa: BLE001 - retry any transient failure
             last_exc = exc
@@ -86,8 +86,10 @@ def run_cpi_refresh() -> None:
             )
             inserted += result.rowcount
         db.commit()
-    except Exception:  # noqa: BLE001 - CPI refresh failure must not kill scheduler
+        _record_mospi_outcome("cpi", None)
+    except Exception as exc:  # noqa: BLE001 - CPI refresh failure must not kill scheduler
         db.rollback()
+        _record_mospi_outcome("cpi", exc)
         raise
     finally:
         db.close()
@@ -111,8 +113,10 @@ def run_wpi_atf_refresh() -> None:
             )
             inserted += result.rowcount
         db.commit()
-    except Exception:  # noqa: BLE001 - WPI refresh failure must not kill scheduler
+        _record_mospi_outcome("wpi_atf", None)
+    except Exception as exc:  # noqa: BLE001 - WPI refresh failure must not kill scheduler
         db.rollback()
+        _record_mospi_outcome("wpi_atf", exc)
         raise
     finally:
         db.close()

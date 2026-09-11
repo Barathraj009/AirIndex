@@ -25,13 +25,10 @@ BASE_META = {
 }
 
 
-def _last_refresh_error() -> str | None:
-    """Surface the most recent MoSPI WPI refresh failure (diagnostics)."""
+def _last_refresh_outcome() -> dict | None:
+    """Surface the most recent MoSPI WPI refresh outcome (diagnostics)."""
     from app.services.scheduler_service import LAST_MOSPI_REFRESH
-    outcome = LAST_MOSPI_REFRESH.get("wpi_atf") or {}
-    if not outcome.get("ok"):
-        return outcome.get("error")
-    return None
+    return LAST_MOSPI_REFRESH.get("wpi_atf")
 
 
 @router.get("/series")
@@ -52,7 +49,7 @@ def get_wpi_atf_series(
         return {
             "available": False,
             "series": [],
-            "last_refresh_error": _last_refresh_error(),
+            "last_refresh": _last_refresh_outcome(),
             **BASE_META,
         }
 
@@ -68,7 +65,7 @@ def get_wpi_atf_series(
     return {
         "available": True,
         "series": series,
-        "last_refresh_error": _last_refresh_error(),
+        "last_refresh": _last_refresh_outcome(),
         **BASE_META,
     }
 
