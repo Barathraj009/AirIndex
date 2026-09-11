@@ -7,6 +7,7 @@ import { Download, FileSpreadsheet } from 'lucide-react'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, Card, LoadingState, ErrorState, EmptyState, TrendPill } from '../components/ui'
 import { TabBar } from '../components/Tabs'
+import ErrorBoundary from '../components/ErrorBoundary'
 import IsometricChart from '../components/IsometricChart'
 import WebGL3DChart from '../components/WebGL3DChart'
 import { movingAverage, computeSeasonality, computeVolatility, fmt } from '../utils/analysis'
@@ -87,12 +88,14 @@ export default function Analysis() {
       />
 
       <div key={tab} className="animate-fade-in-up">
-        {tab === 'trend' && <TrendTab />}
-        {tab === 'forecast' && <ForecastTab />}
-        {tab === 'seasonality' && <SeasonalityTab />}
-        {tab === 'inflation' && <InflationTab />}
-        {tab === 'components' && <ComponentsTab />}
-        {tab === 'routes' && <RoutesTab />}
+        <ErrorBoundary>
+          {tab === 'trend' && <TrendTab />}
+          {tab === 'forecast' && <ForecastTab />}
+          {tab === 'seasonality' && <SeasonalityTab />}
+          {tab === 'inflation' && <InflationTab />}
+          {tab === 'components' && <ComponentsTab />}
+          {tab === 'routes' && <RoutesTab />}
+        </ErrorBoundary>
       </div>
     </div>
   )
@@ -285,10 +288,13 @@ function SeasonalityTab() {
   const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=120')
   const chartRef = useRef<HTMLDivElement>(null)
 
+  const series = trend.data?.series ?? []
+  const seasonal = useMemo(() => computeSeasonality(series), [series])
+  const volatility = useMemo(() => computeVolatility(series), [series])
+
   if (trend.loading) return <LoadingState label="Loading seasonality data..." />
   if (trend.error) return <ErrorState message={trend.error} onRetry={trend.refetch} />
 
-  const series = trend.data?.series ?? []
   if (series.length < 3) {
     return (
       <Card>
@@ -297,8 +303,6 @@ function SeasonalityTab() {
     )
   }
 
-  const seasonal = useMemo(() => computeSeasonality(series), [series])
-  const volatility = useMemo(() => computeVolatility(series), [series])
   const maxAbsDev = Math.max(...seasonal.map((r) => Math.abs(r.deviationPct)), 0.01)
 
   const csvRows = {
@@ -380,8 +384,8 @@ function InflationTab() {
   if (trend.loading) return <LoadingState label="Loading inflation data..." />
   if (trend.error) return <ErrorState message={trend.error} onRetry={trend.refetch} />
 
-  const data = (trend.data?.series ?? []).filter((p) => p.inflation_yoy !== null)
-  if (data.length === 0) {
+  const raw = trend.data?.series ?? []
+  if (raw.length === 0) {
     return (
       <Card>
         <EmptyState message="Year-over-year inflation figures will appear once index data is available." />
@@ -389,13 +393,27 @@ function InflationTab() {
     )
   }
 
-  const chart = data.map((p) => ({ period: p.period, inflation_yoy: p.inflation_yoy as number }))
-  const avg = chart.reduce((s, d) => s + d.inflation_yoy, 0) / chart.length
-  const latest = chart[chart.length - 1]
+  // Keep the full window so the missing months are visible as gaps,
+  // with a note explaining why YoY is unavailable for the early part.
+  const chart = raw.map((p) => ({
+    period: p.period,
+    inflation_yoy: p.inflation_yoy as number | null,
+    mom_pct: null as number | null,
+  }))
+  for (let i = 1; i < raw.length; i++) {
+    const prev = raw[i - 1].airfare_index
+    if (prev > 0) {
+      chart[i].mom_pct = ((raw[i].airfare_index - prev) / prev) * 100
+    }
+  }
+
+  const yoyPoints = chart.filter((d): d is { period: string; inflation_yoy: number; mom_pct: number | null } => d.inflation_yoy !== null)
+  const avg = yoyPoints.length ? yoyPoints.reduce((s, d) => s + d.inflation_yoy, 0) / yoyPoints.length : 0
+  const latest = yoyPoints[yoyPoints.length - 1]
 
   const csvRows = {
-    headers: ['Period', 'YoY inflation %'],
-    rows: chart.map((d) => [d.period, d.inflation_yoy]),
+    headers: ['Period', 'YoY inflation %', 'MoM %'],
+    rows: chart.map((d) => [d.period, d.inflation_yoy, d.mom_pct]),
   }
 
   return (
@@ -404,12 +422,12 @@ function InflationTab() {
         <div className="rounded-xl border border-line bg-white p-4 shadow-card">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">12-mo avg YoY inflation</div>
           <div className="mt-1.5 text-2xl font-bold text-ink tabular-nums">{avg.toFixed(2)}%</div>
-          <div className="mt-1 text-xs text-muted">average over the displayed window</div>
+          <div className="mt-1 text-xs text-muted">average over the available YoY months</div>
         </div>
         <div className="rounded-xl border border-line bg-white p-4 shadow-card">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Latest month</div>
-          <div className="mt-1.5"><TrendPill value={latest.inflation_yoy} /></div>
-          <div className="mt-1 text-xs text-muted">{latest.period}</div>
+          <div className="mt-1.5"><TrendPill value={latest?.inflation_yoy ?? null} /></div>
+          <div className="mt-1 text-xs text-muted">{latest?.period ?? '\u2014'}</div>
         </div>
       </div>
       <Card
@@ -422,13 +440,15 @@ function InflationTab() {
         }
       >
         <p className="pb-4 text-xs text-muted">
-          Airfare inflation vs the same month a year earlier. Positive bars = fares more expensive than a year ago.
+          Airfare inflation vs the same month a year earlier. Positive bars = fares more expensive than a year ago. The gap
+          before Jan 2026 is because the base 2024=100 MoSPI series only began in Jan 2025 — a full year is needed to compute
+          YoY.
         </p>
         <div ref={chartRef}>
           {mode === '3d' ? (
             <>
               <IsometricChart
-                data={chart.map((d) => ({ label: d.period, value: d.inflation_yoy, color: d.inflation_yoy >= 0 ? '#f43f5e' : '#10b981' }))}
+                data={yoyPoints.map((d) => ({ label: d.period, value: d.inflation_yoy, color: d.inflation_yoy >= 0 ? '#f43f5e' : '#10b981' }))}
                 height={320}
                 valueFormatter={(v) => `${v.toFixed(2)}%`}
               />
@@ -436,7 +456,7 @@ function InflationTab() {
             </>
           ) : mode === 'webgl' ? (
             <WebGL3DChart
-              data={chart.map((d) => ({ label: d.period, value: d.inflation_yoy, color: d.inflation_yoy >= 0 ? '#f43f5e' : '#10b981' }))}
+              data={yoyPoints.map((d) => ({ label: d.period, value: d.inflation_yoy, color: d.inflation_yoy >= 0 ? '#f43f5e' : '#10b981' }))}
               height={320}
               valueFormatter={(v) => `${v.toFixed(2)}%`}
             />
@@ -446,10 +466,10 @@ function InflationTab() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="period" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} unit="%" />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#0f172a', fontWeight: 600 }} formatter={(v: number) => [`${v.toFixed(2)}%`, 'YoY inflation']} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#0f172a', fontWeight: 600 }} formatter={(v: unknown) => (v == null || v === '' ? ['\u2014', 'YoY inflation'] : [`${Number(v).toFixed(2)}%`, 'YoY inflation'])} />
                 <Bar dataKey="inflation_yoy" radius={[4, 4, 0, 0]}>
                   {chart.map((d, i) => (
-                    <Cell key={i} fill={d.inflation_yoy >= 0 ? '#f43f5e' : '#10b981'} />
+                    <Cell key={i} fill={d.inflation_yoy != null && d.inflation_yoy >= 0 ? '#f43f5e' : '#10b981'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -580,15 +600,15 @@ function RoutesTab() {
   const routesQuery = useApiQuery<Route[]>('/routes')
   const [mode, setMode] = useState<ChartMode>('2d')
 
-  if (routesQuery.loading) return <LoadingState label="Loading route basket..." />
-  if (routesQuery.error) return <ErrorState message={routesQuery.error} onRetry={routesQuery.refetch} />
-
   const routes = routesQuery.data ?? []
   const sorted = useMemo(() => [...routes].sort((a, b) => b.weight - a.weight), [routes])
   const rows = useMemo(
     () => sorted.map((r) => ({ route: `${r.origin}\u2013${r.destination}`, weight: r.weight })),
     [sorted]
   )
+
+  if (routesQuery.loading) return <LoadingState label="Loading route basket..." />
+  if (routesQuery.error) return <ErrorState message={routesQuery.error} onRetry={routesQuery.refetch} />
 
   return (
     <div className="space-y-5">

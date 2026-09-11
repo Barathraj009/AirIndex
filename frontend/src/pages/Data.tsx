@@ -78,6 +78,10 @@ export default function Data() {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-[11px] text-muted">
+          MoM % needs the previous month, so the first period is always blank. YoY % compares with the same month one year
+          earlier; the MoSPI basket is base 2024=100 and only began in Jan 2025, so YoY figures start from Jan 2026.
+        </p>
       </Card>
     </div>
   )
