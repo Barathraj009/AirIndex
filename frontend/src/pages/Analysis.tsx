@@ -12,9 +12,9 @@ import IsometricChart from '../components/IsometricChart'
 import WebGL3DChart from '../components/WebGL3DChart'
 import { movingAverage, computeSeasonality, computeVolatility, fmt } from '../utils/analysis'
 import { downloadCSV, exportChartAsPNG } from '../utils/exportChart'
-import type { CpiAirfareTrend, Route, CpiForecastResult, CpiAirfareTrendPoint } from '../types'
+import type { CpiAirfareTrend, Route, CpiForecastResult, CpiAirfareTrendPoint, FuelVsAirfare } from '../types'
 
-type AnalysisTab = 'trend' | 'inflation' | 'components' | 'routes' | 'forecast' | 'seasonality'
+type AnalysisTab = 'trend' | 'inflation' | 'components' | 'routes' | 'forecast' | 'seasonality' | 'fuel'
 type ChartMode = '2d' | '3d' | 'webgl'
 
 function ModePicker({ mode, onChange, showWebgl = true }: { mode: ChartMode; onChange: (m: ChartMode) => void; showWebgl?: boolean }) {
@@ -81,6 +81,7 @@ export default function Analysis() {
           { key: 'seasonality', label: 'Seasonality & Volatility' },
           { key: 'inflation', label: 'Inflation' },
           { key: 'components', label: 'Airfare vs Transport' },
+          { key: 'fuel', label: 'Fuel Cost vs Airfare' },
           { key: 'routes', label: 'Route Basket' },
         ]}
         active={tab}
@@ -94,6 +95,7 @@ export default function Analysis() {
           {tab === 'seasonality' && <SeasonalityTab />}
           {tab === 'inflation' && <InflationTab />}
           {tab === 'components' && <ComponentsTab />}
+          {tab === 'fuel' && <FuelCostTab />}
           {tab === 'routes' && <RoutesTab />}
         </ErrorBoundary>
       </div>
@@ -585,6 +587,89 @@ function ComponentsTab() {
                     <td className="py-2.5 px-3 text-right">
                       {gap !== null ? <TrendPill value={gap} /> : '\u2014'}
                     </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+function FuelCostTab() {
+  const fuel = useApiQuery<FuelVsAirfare>('/wpi-atf/fuel-vs-airfare?months=24')
+  const chartRef = useRef<HTMLDivElement>(null)
+
+  if (fuel.loading) return <LoadingState label="Loading fuel-cost comparison..." />
+  if (fuel.error) return <ErrorState message={fuel.error} onRetry={fuel.refetch} />
+
+  const data = fuel.data?.series ?? []
+  if (!fuel.data?.available || data.length === 0) {
+    return (
+      <Card>
+        <EmptyState message={fuel.data?.note ?? 'Fuel-cost data is not available yet. The backend fetches WPI data shortly after startup.'} />
+      </Card>
+    )
+  }
+
+  const csvRows = {
+    headers: ['Period', 'Airfare (rebased)', 'ATF fuel (rebased)', 'Airfare CPI', 'WPI ATF'],
+    rows: data.map((p) => [p.period, p.airfare_rebased, p.atf_rebased, p.airfare_index, p.atf_index]),
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title="Fuel Cost vs Airfare"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportButtons targetName="fuel-cost-vs-airfare" chartRef={chartRef} csvRows={csvRows} />
+          </div>
+        }
+      >
+        <p className="pb-4 text-[11px] text-muted">
+          WPI Aviation Turbine Fuel (MoSPI, {fuel.data?.atf_base_year} base) vs airfare CPI (MoSPI, {fuel.data?.airfare_base_year} base).
+          {fuel.data?.rebase_period ? <> Both series rebased to 100 at <span className="font-medium text-ink">{fuel.data.rebase_period}</span> so the lines show relative movement only.</> : null}
+        </p>
+        <div ref={chartRef}>
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="period" tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#0f172a', fontWeight: 600 }} />
+              <Legend />
+              <Line type="monotone" dataKey="airfare_rebased" name="Airfare (rebased)" stroke="#1471e8" strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
+              <Line type="monotone" dataKey="atf_rebased" name="ATF fuel (rebased)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+      <Card>
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-muted border-b border-line bg-slate-50">
+                <th className="py-2.5 px-3 font-medium">Period</th>
+                <th className="py-2.5 px-3 text-right font-medium">Airfare CPI</th>
+                <th className="py-2.5 px-3 text-right font-medium">WPI ATF</th>
+                <th className="py-2.5 px-3 text-right font-medium">Airfare Δ</th>
+                <th className="py-2.5 px-3 text-right font-medium">ATF fuel Δ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((p) => {
+                const aGap = p.airfare_rebased !== null ? p.airfare_rebased - 100 : null
+                const fGap = p.atf_rebased !== null ? p.atf_rebased - 100 : null
+                return (
+                  <tr key={p.period} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
+                    <td className="py-2.5 px-3 font-medium text-ink">{p.period}</td>
+                    <td className="py-2.5 px-3 text-right tabular-nums">{p.airfare_index.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right tabular-nums text-muted">{p.atf_index.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right">{aGap !== null ? <TrendPill value={aGap} /> : '\u2014'}</td>
+                    <td className="py-2.5 px-3 text-right">{fGap !== null ? <TrendPill value={fGap} /> : '\u2014'}</td>
                   </tr>
                 )
               })}

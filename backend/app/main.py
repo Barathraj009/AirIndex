@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.rate_limit import RateLimitMiddleware
-from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin, alerts, reports, cpi_airfare
+from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin, alerts, reports, cpi_airfare, wpi_atf
 
 settings = get_settings()
 
@@ -25,9 +25,13 @@ async def lifespan(app: FastAPI):
     if scheduler_enabled:
         # First-run CPI bootstrap: fetch MoSPI data so the table is
         # populated even before the first daily refresh fires.
-        from app.services.scheduler_service import run_cpi_refresh
+        from app.services.scheduler_service import run_cpi_refresh, run_wpi_atf_refresh
         try:
             run_cpi_refresh()
+        except Exception:
+            pass
+        try:
+            run_wpi_atf_refresh()
         except Exception:
             pass
 
@@ -69,6 +73,7 @@ app.include_router(bulletin.router)
 app.include_router(alerts.router)
 app.include_router(reports.router)
 app.include_router(cpi_airfare.router)
+app.include_router(wpi_atf.router)
 
 
 

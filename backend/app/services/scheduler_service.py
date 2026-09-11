@@ -56,6 +56,31 @@ def run_cpi_refresh() -> None:
         db.close()
 
 
+def run_wpi_atf_refresh() -> None:
+    """Fetch MoSPI WPI ATF data and upsert into wpi_atf_index table."""
+    db = SessionLocal()
+    try:
+        from ingestion.adapters.mospi_wpi import fetch_mospi_wpi_atf
+        from app.models.wpi_atf import WpiAtfIndex
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        records = fetch_mospi_wpi_atf()
+        inserted = 0
+        for rec in records:
+            result = db.execute(
+                pg_insert(WpiAtfIndex)
+                .values(**rec)
+                .on_conflict_do_nothing(index_elements=[WpiAtfIndex.period])
+            )
+            inserted += result.rowcount
+        db.commit()
+    except Exception:  # noqa: BLE001 - WPI refresh failure must not kill scheduler
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 scheduler = BackgroundScheduler(timezone="UTC")
 
 
@@ -80,6 +105,17 @@ def start_scheduler(cron_expr: str, enabled: bool = True) -> bool:
         CronTrigger(hour=6, minute=0),
         id="cpi_refresh",
         name="Refresh MoSPI CPI airfare index",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    # Refresh MoSPI WPI ATF daily at 06:10 UTC (after CPI)
+    scheduler.add_job(
+        run_wpi_atf_refresh,
+        CronTrigger(hour=6, minute=10),
+        id="wpi_atf_refresh",
+        name="Refresh MoSPI WPI ATF fuel-cost index",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

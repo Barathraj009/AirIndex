@@ -9,10 +9,11 @@ from app.models.index import IndexConfigModel, IndexRun, RouteContribution, Airl
 from app.models.auth import User, AuditLogEntry
 from app.models.backtesting import ReferenceDataPoint
 from app.models.cpi import CpiAirfareIndex
+from app.models.wpi_atf import WpiAtfIndex
 
 __all__ = [
     "Base", "Route", "Airline", "DataSource", "BookingWindowConfig",
     "FareObservation", "IngestionRun",
     "IndexConfigModel", "IndexRun", "RouteContribution", "AirlineContribution",
-    "User", "AuditLogEntry", "ReferenceDataPoint", "CpiAirfareIndex",
+    "User", "AuditLogEntry", "ReferenceDataPoint", "CpiAirfareIndex", "WpiAtfIndex",
 ]

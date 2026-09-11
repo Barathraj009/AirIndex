@@ -254,3 +254,36 @@ export interface CpiForecastResult {
   note?: string
   base_year?: string
 }
+
+// MoSPI WPI ATF (Aviation Turbine Fuel) types
+export interface WpiAtfPoint {
+  period: string
+  atf_index: number
+  inflation_mom: number | null
+  inflation_yoy: number | null
+}
+
+export interface WpiAtfSeries {
+  available: boolean
+  series: WpiAtfPoint[]
+  base_year: string
+  source: string
+  wpi_code: string
+}
+
+export interface FuelVsAirfarePoint {
+  period: string
+  airfare_index: number
+  atf_index: number
+  airfare_rebased: number | null
+  atf_rebased: number | null
+}
+
+export interface FuelVsAirfare {
+  available: boolean
+  rebase_period: string | null
+  series: FuelVsAirfarePoint[]
+  note: string | null
+  atf_base_year: string
+  airfare_base_year: string
+}
