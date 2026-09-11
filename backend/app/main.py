@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import logging
+import threading
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,9 +10,23 @@ from app.core.config import get_settings
 from app.core.rate_limit import RateLimitMiddleware
 from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin, alerts, reports, cpi_airfare, wpi_atf
 
+logger = logging.getLogger(__name__)
+
 settings = get_settings()
 
 
+def _bootstrap_mospi_refresh() -> None:
+    """First-run CPI + WPI bootstrap. Runs on a background thread so a slow
+    MoSPI response never blocks app startup or the scheduler thread pool.
+    Failures are logged (not fatal) and the daily cron retries."""
+    from app.services.scheduler_service import run_cpi_refresh, run_wpi_atf_refresh
+
+    for name, runner in (("CPI", run_cpi_refresh), ("WPI ATF", run_wpi_atf_refresh)):
+        try:
+            runner()
+            logger.info("MoSPI %s bootstrap refresh completed", name)
+        except Exception:  # noqa: BLE001 - fixture failure must not crash app
+            logger.exception("MoSPI %s bootstrap refresh failed; daily cron will retry", name)
 
 
 @asynccontextmanager
@@ -23,17 +39,9 @@ async def lifespan(app: FastAPI):
     start_scheduler(settings.ingestion_schedule_cron, enabled=scheduler_enabled)
 
     if scheduler_enabled:
-        # First-run CPI bootstrap: fetch MoSPI data so the table is
+        # First-run MoSPI bootstrap on a background thread so the tables are
         # populated even before the first daily refresh fires.
-        from app.services.scheduler_service import run_cpi_refresh, run_wpi_atf_refresh
-        try:
-            run_cpi_refresh()
-        except Exception:
-            pass
-        try:
-            run_wpi_atf_refresh()
-        except Exception:
-            pass
+        threading.Thread(target=_bootstrap_mospi_refresh, name="mospi-bootstrap", daemon=True).start()
 
     try:
         yield

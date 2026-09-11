@@ -13,8 +13,30 @@ are safe.
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+import logging
+import time
+
 from app.core.database import SessionLocal
 from app.services.ingestion_runner import collect_from_sources
+
+logger = logging.getLogger(__name__)
+
+
+def _fetch_with_retry(fetcher, retries: int = 3) -> list:
+    """Call a MoSPI fetch with retry + backoff. MoSPI occasionally hiccups
+    (throttle/reset) and a retry usually succeeds."""
+    delays = (1, 3, 9)
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return fetcher()
+        except Exception as exc:  # noqa: BLE001 - retry any transient failure
+            last_exc = exc
+            if attempt < retries - 1:
+                logger.warning("MoSPI fetch attempt %d/%d failed: %s; retrying", attempt + 1, retries, exc)
+                time.sleep(delays[min(attempt, len(delays) - 1)])
+    logger.error("MoSPI fetch failed after %d attempts: %s", retries, last_exc)
+    raise last_exc  # type: ignore[misc]
 
 
 def run_scheduled_ingestion() -> None:
@@ -39,7 +61,7 @@ def run_cpi_refresh() -> None:
         from app.models.cpi import CpiAirfareIndex
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        records = fetch_mospi_airfare_index()
+        records = _fetch_with_retry(fetch_mospi_airfare_index)
         inserted = 0
         for rec in records:
             result = db.execute(
@@ -64,7 +86,7 @@ def run_wpi_atf_refresh() -> None:
         from app.models.wpi_atf import WpiAtfIndex
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        records = fetch_mospi_wpi_atf()
+        records = _fetch_with_retry(fetch_mospi_wpi_atf)
         inserted = 0
         for rec in records:
             result = db.execute(
