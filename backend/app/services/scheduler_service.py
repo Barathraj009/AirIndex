@@ -86,7 +86,6 @@ def run_cpi_refresh() -> None:
             )
             inserted += result.rowcount
         db.commit()
-        _record_mospi_outcome("cpi", None)
     except Exception as exc:  # noqa: BLE001 - CPI refresh failure must not kill scheduler
         db.rollback()
         _record_mospi_outcome("cpi", exc)
@@ -113,7 +112,6 @@ def run_wpi_atf_refresh() -> None:
             )
             inserted += result.rowcount
         db.commit()
-        _record_mospi_outcome("wpi_atf", None)
     except Exception as exc:  # noqa: BLE001 - WPI refresh failure must not kill scheduler
         db.rollback()
         _record_mospi_outcome("wpi_atf", exc)
