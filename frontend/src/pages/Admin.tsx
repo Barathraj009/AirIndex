@@ -3,23 +3,21 @@ import { useApiQuery } from '../hooks/useApiQuery'
 import { api } from '../api/client'
 import { PageHeader, Card, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { TabBar } from '../components/Tabs'
-import type { Route, AuditLogRow, DataSourceItem, UserItem, IndexConfigItem } from '../types'
+import type { Route, AuditLogRow, UserItem, IndexConfigItem } from '../types'
 
-type AdminTab = 'routes' | 'sources' | 'users' | 'config' | 'audit'
+type AdminTab = 'routes' | 'users' | 'config'
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState<AdminTab>('routes')
 
   return (
     <div>
-      <PageHeader title="Administration" subtitle="Route weights, data sources, users, and index config" />
+      <PageHeader title="Administration" subtitle="Route weights, users, and index config" />
       <TabBar
         tabs={[
           { key: 'routes', label: 'Route Weights' },
-          { key: 'sources', label: 'Data Sources' },
           { key: 'users', label: 'Users' },
           { key: 'config', label: 'Index Config' },
-          { key: 'audit', label: 'Audit Log' },
         ]}
         active={activeTab}
         onChange={(k) => setActiveTab(k as AdminTab)}
@@ -27,10 +25,8 @@ export default function Admin() {
 
       <div key={activeTab} className="animate-fade-in-up">
         {activeTab === 'routes' && <RoutesTab />}
-        {activeTab === 'sources' && <SourcesTab />}
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'config' && <ConfigTab />}
-        {activeTab === 'audit' && <AuditTab />}
       </div>
     </div>
   )
@@ -161,69 +157,6 @@ function RoutesTab() {
         </div>
       )}
       {routeError && <p className="mt-2 text-xs text-rose-600">{routeError}</p>}
-    </Card>
-  )
-}
-
-function SourcesTab() {
-  const sourcesQuery = useApiQuery<DataSourceItem[]>('/admin/data-sources')
-  const [error, setError] = useState<string | null>(null)
-
-  const toggleSource = async (sourceId: number) => {
-    setError(null)
-    try {
-      await api.patch(`/admin/data-sources/${sourceId}/toggle`, {})
-      sourcesQuery.refetch()
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  return (
-    <Card title="Ingestion Data Sources">
-      <p className="text-xs text-muted pb-4">
-        Manage active scraping adapters and public data collection endpoints.
-      </p>
-      {error && <p className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700">{error}</p>}
-      {sourcesQuery.loading && <LoadingState />}
-      {sourcesQuery.error && <ErrorState message={sourcesQuery.error} onRetry={sourcesQuery.refetch} />}
-      {sourcesQuery.data && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {sourcesQuery.data.map((src) => (
-            <div key={src.id} className="flex flex-col justify-between rounded-xl border border-line bg-white p-4 shadow-card">
-              <div>
-                <div className="mb-2 flex items-start justify-between">
-                  <h4 className="text-sm font-semibold text-ink">{src.name}</h4>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${src.active ? 'bg-emerald-500/10 text-emerald-700' : 'bg-slate-500/10 text-slate-500'}`}>
-                    {src.active ? 'ACTIVE' : 'DISABLED'}
-                  </span>
-                </div>
-                <p className="mb-2 text-xs text-muted">Type: <span className="font-mono text-slate-600">{src.source_type}</span></p>
-                {src.last_success_at && (
-                  <p className="text-xs text-muted">Last success: {new Date(src.last_success_at).toLocaleString()}</p>
-                )}
-                {src.last_failure_reason && (
-                  <p className="mt-2 rounded-md border border-amber-500/25 bg-amber-500/10 p-1.5 text-xs text-amber-700">
-                    {src.last_failure_reason}
-                  </p>
-                )}
-              </div>
-              <div className="mt-4 flex justify-end border-t border-lineSoft pt-3">
-                <button
-                  onClick={() => toggleSource(src.id)}
-                  className={`text-xs rounded-lg px-3 py-1.5 font-medium transition-colors ${
-                    src.active
-                      ? 'border border-rose-500/40 text-rose-600 hover:bg-rose-500/10'
-                      : 'border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10'
-                  }`}
-                >
-                  {src.active ? 'Disable' : 'Enable'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </Card>
   )
 }
@@ -477,48 +410,7 @@ function ConfigTab() {
           </table>
         </div>
       )}
-    </Card>
-  )
-}
 
-function AuditTab() {
-  const auditQuery = useApiQuery<AuditLogRow[]>('/admin/audit-log')
-
-  return (
-    <Card title="System Audit Trail">
-      {auditQuery.loading && <LoadingState />}
-      {auditQuery.error && <ErrorState message={auditQuery.error} onRetry={auditQuery.refetch} />}
-      {auditQuery.data && auditQuery.data.length === 0 && <EmptyState message="No administrative actions recorded yet." />}
-      {auditQuery.data && auditQuery.data.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-line">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left text-muted border-b border-line bg-slate-50">
-                <th className="py-2.5 px-3 font-medium">Timestamp</th>
-                <th className="py-2.5 px-3 font-medium">User</th>
-                <th className="py-2.5 px-3 font-medium">Action</th>
-                <th className="py-2.5 px-3 font-medium">Target</th>
-                <th className="py-2.5 px-3 font-medium">Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auditQuery.data.map((entry) => (
-                <tr key={entry.id} className="border-b border-lineSoft hover:bg-slate-50">
-                  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">{new Date(entry.timestamp).toLocaleString()}</td>
-                  <td className="py-2.5 px-3 font-medium text-ink">{entry.user_email ?? 'System'}</td>
-                  <td className="py-2.5 px-3 font-mono text-[11px] font-semibold text-brand-700">{entry.action}</td>
-                  <td className="py-2.5 px-3 text-muted">
-                    {entry.entity_type ? `${entry.entity_type}${entry.entity_id ? ` #${entry.entity_id}` : ''}` : '\u2014'}
-                  </td>
-                  <td className="py-2.5 px-3 max-w-xs truncate font-mono text-[10px] text-slate-400">
-                    {entry.details ? JSON.stringify(entry.details) : '\u2014'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </Card>
   )
 }
