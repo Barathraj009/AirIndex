@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.deps import require_permission
-from app.services.index_engine import IndexConfig, compute_index
-from app.services.reports import export_index, export_index_pdf, export_index_excel
+from app.services.index_engine import compute_index
+from app.services.reports import export_index_pdf, export_index_excel
+from app.api.routers.index import _active_config_and_weights
 from app.api.query_helpers import load_observations_df
-from app.models.reference import Route
 from app.models.auth import User
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -31,15 +31,14 @@ def export_report(current_user: User = Depends(require_permission("view_reports"
     if df.empty:
         raise HTTPException(status_code=404, detail="No observation data found.")
 
-    route_weights = {r.route_key: r.weight for r in db.query(Route).filter(Route.active == True).all()}
-    config = IndexConfig(base_period="2026-01", route_weights=route_weights)
+    config, _active = _active_config_and_weights(db)
     period = sorted(df["travel_date"].str[:7].unique())[-1]
     result = compute_index(df, config, as_of_period=period)
 
     if len(fmt_list) == 1:
         fmt = fmt_list[0]
         if fmt == "pdf":
-            pdf_bytes = export_index_pdf(result, config_base_period="2026-01")
+            pdf_bytes = export_index_pdf(result, config_base_period=config.base_period)
             return StreamingResponse(
                 iter([pdf_bytes]),
                 media_type="application/pdf",
@@ -59,7 +58,7 @@ def export_report(current_user: User = Depends(require_permission("view_reports"
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             if "pdf" in fmt_list:
-                zf.writestr("airindex_report.pdf", export_index_pdf(result, config_base_period="2026-01"))
+                zf.writestr("airindex_report.pdf", export_index_pdf(result, config_base_period=config.base_period))
             if "excel" in fmt_list:
                 zf.writestr("airindex_report.xlsx", export_index_excel(result))
         buf.seek(0)

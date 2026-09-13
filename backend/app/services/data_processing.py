@@ -8,9 +8,8 @@ dataset ready for the Airfare Price Index Engine.
 This module is intentionally framework-agnostic (no FastAPI / SQLAlchemy
 imports) so it can be:
   1. Unit tested in isolation (see tests/test_data_processing.py)
-  2. Reused unchanged by both the FastAPI production service layer
-     (backend/app/api/*) and the lightweight dev_demo Flask reference
-     server.
+  2. Reused unchanged by the FastAPI production service layer
+     (backend/app/api/*).
 
 Data-quality statuses
 ----------------------
@@ -294,7 +293,7 @@ def deduplicate(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 def run_pipeline(raw_df: pd.DataFrame, source: str, source_type: str) -> tuple[pd.DataFrame, QualityReport]:
     """Full pipeline: normalize -> dedup -> structural validation ->
     outlier detection -> quality report. This is the single entry point
-    both the FastAPI ingestion service and the dev_demo server call."""
+    the FastAPI ingestion service calls."""
     report = QualityReport()
 
     df = normalize_raw_observations(raw_df, source=source, source_type=source_type)

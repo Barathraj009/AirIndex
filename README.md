@@ -58,28 +58,29 @@ See `docs/VERIFICATION_LOG.md` for the full per-item record.
   (120 req/min, verified 429 + `Retry-After`), APScheduler cron job
   (every 6 h, disabled under `ENVIRONMENT=test`), CORS, global error
   handler, `/api/health`.
-- **MoSPI CPI Augmentation Simulator** (`backend/app/services/cpi_engine.py`,
-  `frontend/src/pages/CpiAugmentation.tsx`) — Models real-time integration
-  of APIx into official Consumer Price Index (Base 2012=100) Transport group
-  (~8.59% weight) and airfare subcomponent (~0.20% weight), computing headline
-  inflation delta (bps), volatility capture, and ~45 days reporting lag reduction.
+- **MoSPI CPI Augmentation Simulator** (`backend/app/services/cpi_engine.py`) —
+  Models real-time integration of APIx into official Consumer Price Index (Base
+  2012=100) Transport group (~8.59% weight) and airfare subcomponent
+  (~0.20% weight), computing headline inflation delta (bps), volatility
+  capture, and ~45 days reporting lag reduction.
 - **DGCA Traffic Calibration & Benchmarks** (`backend/app/services/dgca_service.py`) —
   Route basket weights calibrated with official DGCA annual domestic city-pair
   passenger traffic volume. 1-click admin auto-calibration and benchmark
   reference datasets for backtesting.
-- **Geospatial Flight Corridor Map** (`frontend/src/pages/GeospatialMap.tsx`) —
-  Interactive SVG map of India with airport hubs and animated flight corridors
-  color-coded by fare inflation rate, with live Route Inspection HUD.
+- **3D Visualization** (`frontend/src/pages/Analysis.tsx`) — Index trend,
+  YoY/MoM inflation, seasonality, forecast bands, route basket, and
+  airfare-vs-ATF analysis with 2D, isometric, and WebGL 3D chart modes.
 - **Surge Anomaly Detection & Forecasting** (`backend/app/services/anomaly_detector.py`,
   `backend/app/services/forecaster.py`) — Route price gouging / surge spike alerts
   and 1–3 month time-series forward index projections with 80% & 95% confidence bands.
-- **Full Admin Console** (`frontend/src/pages/Admin.tsx`) — 5 dedicated tabs:
-  Route Weights (with DGCA auto-calibration), Data Sources controller, User
-  Management (roles & status toggling), Index Configuration, and Audit Log.
+- **Full Admin Console** (`frontend/src/pages/Admin.tsx`) — dedicated tabs:
+  Route Weights (with DGCA auto-calibration), User Management (roles & status
+  toggling), and Index Configuration.
 - **Official Monthly Statistical Bulletin** (`backend/app/api/routers/bulletin.py`) —
   Automated MoSPI/DGCA executive summary export (`/api/exports/monthly-bulletin`).
-- **Frontend** — React + TypeScript + Vite + Tailwind + Recharts. 15 comprehensive
-  pages with full navigation, typed API client, Change Password modal, and auth guards.
+- **Frontend** — React + TypeScript + Vite + Tailwind + Recharts + ECharts GL.
+  Core pages (Login, Dashboard, Analysis, Data, Admin) with full navigation,
+  typed API client, Change Password modal, and auth guards.
 - **Seed** (`scripts/seed_database.py`) — idempotent: 16 routes, 7330 fare observations,
   multi-role accounts (ADMIN, ANALYST, VIEWER), all data sources, DGCA benchmark data.
 - **Report Generation** (`backend/app/services/reports.py`) — PDF executive reports
@@ -88,25 +89,23 @@ See `docs/VERIFICATION_LOG.md` for the full per-item record.
 - **Surge Alert Notifications** (`backend/app/services/alerts.py`) — Configurable
   threshold-based alerting with SMTP email and webhook notification channels.
   `GET /api/alerts/check` and `POST /api/alerts/check-and-notify` endpoints.
-- **Deployment Analysis** (`DEPLOYMENT_ANALYSIS.md`) — Free platform comparison
-  (Render recommended) with migration steps and env var mapping.
 
 
-## Test suite — 75 tests, all passing
+## Test suite — all passing
 
 ```
-PYTHONPATH=".;./backend"  python -m unittest discover -s tests      # 75 tests: OK
+PYTHONPATH=".;./backend"  python -m unittest discover -s tests        # 90 tests: OK
 PYTHONPATH=".;./backend"  python -m unittest tests.test_api_integration -v
 ```
 
 Windows/PowerShell:
 
 ```powershell
-$env:PYTHONPATH=".;./backend"; .venv\Scripts\python.exe -m unittest discover -s tests -q
+$env:PYTHONPATH=".;./backend"; python -m unittest discover -s tests -q
 ```
 
-50 unit tests cover the analytical core, security, DB schema, rate
-limiter, and scheduler wiring. 19 integration tests hit the **real
+70 unit tests cover the analytical core, security, DB schema, rate
+limiter, and scheduler wiring. 20 integration tests hit the **real
 HTTP API** (`FastAPI.testclient`) against a dedicated
 `airindex_test` database — every test forces
 `DATABASE_URL=airindex_test` + `ENVIRONMENT=test` before app imports and

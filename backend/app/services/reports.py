@@ -6,7 +6,7 @@ Provides two export formats from an IndexResult:
 
 Usage:
     from app.services.reports import export_index_pdf, export_index_excel
-    pdf_bytes = export_index_pdf(result, config_base_period="2026-01")
+    pdf_bytes = export_index_pdf(result, config_base_period=config.base_period)
     xl_bytes = export_index_excel(result)
 """
 
@@ -29,6 +29,7 @@ from app.core.database import engine, SessionLocal
 from app.models import Base
 from app.api.query_helpers import load_observations_df
 from app.models.reference import Route
+from app.models.index import IndexConfigModel
 
 
 # ---------------------------------------------------------------------------
@@ -52,8 +53,12 @@ def export_index(formats: list[str] | None = None) -> dict[str, bytes]:
         if df.empty:
             raise ValueError("No observation data found.")
 
-        route_weights = {r.route_key: r.weight for r in db.query(Route).filter(Route.active == True).all()}
-        config = IndexConfig(base_period="2026-01", route_weights=route_weights)
+        route_weights = {r.route_key: r.weight for r in db.query(Route).filter(Route.active == True).all()}  # noqa: E712
+        active = db.query(IndexConfigModel).filter(IndexConfigModel.is_active == True).first()  # noqa: E712
+        base_period = active.base_period if active else None
+        if base_period is None:
+            raise ValueError("No active index configuration found.")
+        config = IndexConfig(base_period=base_period, route_weights=route_weights)
         period = sorted(df["travel_date"].str[:7].unique())[-1]
         result = compute_index(df, config, as_of_period=period)
     finally:
@@ -62,7 +67,7 @@ def export_index(formats: list[str] | None = None) -> dict[str, bytes]:
     formats = formats or ["pdf", "excel"]
     output: dict[str, bytes] = {}
     if "pdf" in formats:
-        output["pdf"] = export_index_pdf(result, config_base_period="2026-01")
+        output["pdf"] = export_index_pdf(result, config_base_period=config.base_period)
     if "excel" in formats:
         output["excel"] = export_index_excel(result)
     return output
@@ -92,7 +97,7 @@ def _style_table(table):
 # PDF export
 # ---------------------------------------------------------------------------
 
-def export_index_pdf(result: IndexResult, config_base_period: str = "2026-01") -> bytes:
+def export_index_pdf(result: IndexResult, config_base_period: str | None = None) -> bytes:
     """Export an IndexResult to a PDF executive report.
 
     Returns the PDF as bytes. Includes:
@@ -102,6 +107,7 @@ def export_index_pdf(result: IndexResult, config_base_period: str = "2026-01") -
     - Airline contributions table
     - Calculation breakdown bullet points
     """
+    config_base_period = config_base_period or result.base_period
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=LETTER, topMargin=0.6 * inch, bottomMargin=0.6 * inch)
     styles = getSampleStyleSheet()
