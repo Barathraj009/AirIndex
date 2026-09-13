@@ -152,6 +152,51 @@ def run_dgca_traffic_refresh() -> None:
         db.close()
 
 
+def run_scraper_compliance_check() -> None:
+    """Re-verify robots.txt for all registered web sources (Phase 13).
+
+    Performs a cache-bypassing, fail-closed robots.txt fetch per source and
+    records any NON-ALLOWED verdict as a scraper_errors row (error_type
+    ROBOTS_DISALLOWED / EDGE_BLOCK) so the Scraper Monitor can explain,
+    over time, why each source is reporting UNAVAILABLE. NEVER collects
+    fare data here — this job only re-checks the compliance gate.
+
+    Adapters still short-circuit on UNAVAILABLE in the normal scheduled
+    ingestion; this job exists so a flapping robots.txt (site temporarily
+    blocking direct fetches) is surfaced as an error log with a clear type.
+    """
+    db = SessionLocal()
+    try:
+        from ingestion.scrapers.sources import SOURCE_REGISTRY
+        from ingestion.scrapers.robots import GLOBAL_ROBOTS_POLICY
+        from app.models.scraping import ScraperError
+
+        checked = 0
+        non_compliant = 0
+        for spec in SOURCE_REGISTRY:
+            if not spec.fare_search_path:
+                continue
+            checked += 1
+            verdict = GLOBAL_ROBOTS_POLICY.check(spec.base_url, spec.fare_search_path, force=True)
+            if not verdict.allowed:
+                non_compliant += 1
+                error_type = "EDGE_BLOCK" if "unreachable" in verdict.reason else "ROBOTS_DISALLOWED"
+                db.add(ScraperError(
+                    source_name=spec.source_name,
+                    error_type=error_type,
+                    message=f"{spec.reason} | live verdict: {verdict.reason}",
+                ))
+        db.commit()
+        _record_refresh_outcome("scraper_compliance", None, n_records=checked)
+        logger.info("Scraper compliance check: %d/%d sources compliant", checked - non_compliant, checked)
+    except Exception as exc:  # noqa: BLE001 - compliance check failure must not kill scheduler
+        db.rollback()
+        _record_refresh_outcome("scraper_compliance", exc)
+        raise
+    finally:
+        db.close()
+
+
 scheduler = BackgroundScheduler(timezone="UTC")
 
 
@@ -199,6 +244,18 @@ def start_scheduler(cron_expr: str, enabled: bool = True) -> bool:
         CronTrigger(day=1, hour=6, minute=20),
         id="dgca_traffic_refresh",
         name="Refresh DGCA city-pair passenger traffic",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600 * 24,
+    )
+    # Re-verify robots.txt for all web sources daily (06:30 UTC) so the
+    # Scraper Monitor's UNAVAILABLE status reflects any robots.txt changes.
+    scheduler.add_job(
+        run_scraper_compliance_check,
+        CronTrigger(hour=6, minute=30),
+        id="scraper_compliance_check",
+        name="Re-check robots.txt for web scraping sources",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

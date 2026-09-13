@@ -287,3 +287,80 @@ export interface FuelVsAirfare {
   atf_base_year: string
   airfare_base_year: string
 }
+
+// Web-scraping framework (Phase 9 Dashboard / Scraper Monitor)
+export type ScraperSourceStatus = 'LIVE' | 'DEMO' | 'MOCK' | 'UNAVAILABLE'
+
+export interface RobotsVerdict {
+  allowed: boolean
+  reason: string | null
+  crawl_delay_seconds: number | null
+  checked_at: number
+}
+
+export interface ScraperSource {
+  source_name: string
+  label: string
+  category: 'AIRLINE' | 'OTA' | 'API' | 'DATASET' | 'DEMO' | string
+  base_url: string
+  robots_url: string
+  status: ScraperSourceStatus
+  reason: string | null
+  fare_search_path: string | null
+  demo_fallback: string | null
+  notes: string[] | null
+  robots_check: RobotsVerdict | null
+  last_run_status: string | null
+  last_run_at: string | null
+  last_success_at: string | null
+  last_failure_reason: string | null
+  as_of: string
+}
+
+export interface ScraperStatusSummary {
+  sources: ScraperSource[]
+  summary: {
+    total: number
+    by_status: Record<ScraperSourceStatus, number>
+  }
+  as_of: string
+}
+
+export interface ScraperRunRow {
+  id: number
+  source_name: string
+  status: 'RUNNING' | 'SUCCESS' | 'SOURCE_UNAVAILABLE' | 'FAILED' | string
+  started_at: string
+  completed_at: string | null
+  rows_collected: number
+  rows_valid: number | null
+  error_message: string | null
+}
+
+export interface LatestFare {
+  origin: string
+  destination: string
+  airline: string
+  flight_number: string | null
+  travel_date: string
+  total_fare: number | null
+  base_fare: number | null
+  taxes_fees: number | null
+  currency: string
+  booking_window_days: number | null
+  source: string
+  source_type: string
+  collection_timestamp: string
+}
+
+export interface RouteFareSummary {
+  route: string
+  origin: string
+  destination: string
+  n: number
+  n_valid: number
+  avg_fare: number | null
+  min_fare: number | null
+  max_fare: number | null
+  latest_collected: string | null
+}

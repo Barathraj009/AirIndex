@@ -52,9 +52,21 @@ def seed():
             ("MOSPI_CPI", "PUBLIC_DATASET"),
             ("KIWI_FLIGHTS", "LIVE_SCRAPE"),
         ]
+        # The 11 web sources named in the scraping spec (5 airlines + 6
+        # OTAs). Seeded as LIVE_SCRAPE so the Scraper Monitor lists them
+        # with their honest UNAVAILABLE status; each adapter re-checks
+        # robots.txt at runtime and degrades to SOURCE_UNAVAILABLE.
+        from ingestion.scrapers.sources import SOURCE_REGISTRY
+        for spec in SOURCE_REGISTRY:
+            sources_to_seed.append((spec.source_name, "LIVE_SCRAPE"))
+
         for sname, stype in sources_to_seed:
             if db.query(DataSource).filter(DataSource.name == sname).first() is None:
-                db.add(DataSource(name=sname, source_type=stype, active=True))
+                base_url = next(
+                    (s.base_url for s in SOURCE_REGISTRY if s.source_name == sname),
+                    None,
+                )
+                db.add(DataSource(name=sname, source_type=stype, active=True, base_url=base_url))
                 print(f"Seeded {sname} data source.")
 
         admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@airindex.gov.in")

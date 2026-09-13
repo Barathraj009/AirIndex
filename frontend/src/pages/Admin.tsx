@@ -3,21 +3,22 @@ import { useApiQuery } from '../hooks/useApiQuery'
 import { api } from '../api/client'
 import { PageHeader, Card, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { TabBar } from '../components/Tabs'
-import type { Route, AuditLogRow, UserItem, IndexConfigItem } from '../types'
+import type { Route, AuditLogRow, UserItem, IndexConfigItem, ScraperStatusSummary, ScraperRunRow } from '../types'
 
-type AdminTab = 'routes' | 'users' | 'config'
+type AdminTab = 'routes' | 'users' | 'config' | 'sources'
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState<AdminTab>('routes')
 
   return (
     <div>
-      <PageHeader title="Administration" subtitle="Route weights, users, and index config" />
+      <PageHeader title="Administration" subtitle="Route weights, users, index config, and data source monitoring" />
       <TabBar
         tabs={[
           { key: 'routes', label: 'Route Weights' },
           { key: 'users', label: 'Users' },
           { key: 'config', label: 'Index Config' },
+          { key: 'sources', label: 'Data Sources' },
         ]}
         active={activeTab}
         onChange={(k) => setActiveTab(k as AdminTab)}
@@ -27,6 +28,7 @@ export default function Admin() {
         {activeTab === 'routes' && <RoutesTab />}
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'config' && <ConfigTab />}
+        {activeTab === 'sources' && <SourcesTab />}
       </div>
     </div>
   )
@@ -412,5 +414,129 @@ function ConfigTab() {
       )}
 
     </Card>
+  )
+}
+
+const statusBadgeCls: Record<string, string> = {
+  LIVE: 'bg-emerald-500/10 text-emerald-700',
+  DEMO: 'bg-amber-500/10 text-amber-700',
+  MOCK: 'bg-slate-500/10 text-slate-500',
+  UNAVAILABLE: 'bg-rose-500/10 text-rose-700',
+}
+
+const runBadgeCls: Record<string, string> = {
+  SUCCESS: 'bg-emerald-500/10 text-emerald-700',
+  RUNNING: 'bg-sky-500/10 text-sky-700',
+  SOURCE_UNAVAILABLE: 'bg-amber-500/10 text-amber-700',
+  FAILED: 'bg-rose-500/10 text-rose-700',
+}
+
+function SourcesTab() {
+  const statusQuery = useApiQuery<ScraperStatusSummary>('/scrapers')
+  const runsQuery = useApiQuery<ScraperRunRow[]>('/scrapers/runs?limit=30')
+
+  const fmt = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : '\u2014')
+
+  return (
+    <div className="space-y-6">
+      <Card title="Web Scraper Sources">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
+          <p className="text-xs text-muted max-w-2xl">
+            Live collection status of the 5 airlines and 6 OTAs named in the scraping spec.
+            Status reflects robots.txt / Terms compliance — sources marked UNAVAILABLE are
+            honestly reported and never scraped around anti-bot walls.
+          </p>
+          {statusQuery.data && (
+            <div className="flex gap-2 text-[11px] font-semibold">
+              {statusQuery.data.summary.by_status.LIVE > 0 && (
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-700">{statusQuery.data.summary.by_status.LIVE} LIVE</span>
+              )}
+              {statusQuery.data.summary.by_status.DEMO > 0 && (
+                <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-700">{statusQuery.data.summary.by_status.DEMO} DEMO</span>
+              )}
+              <span className="rounded-full bg-rose-500/10 px-2.5 py-1 text-rose-700">{statusQuery.data.summary.by_status.UNAVAILABLE} UNAVAILABLE</span>
+            </div>
+          )}
+        </div>
+
+        {statusQuery.loading && <LoadingState />}
+        {statusQuery.error && <ErrorState message={statusQuery.error} onRetry={statusQuery.refetch} />}
+        {statusQuery.data && (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted border-b border-line bg-slate-50">
+                  <th className="py-2.5 px-3 font-medium">Source</th>
+                  <th className="py-2.5 px-3 font-medium">Category</th>
+                  <th className="py-2.5 px-3 font-medium">Status</th>
+                  <th className="py-2.5 px-3 font-medium">Last Run</th>
+                  <th className="py-2.5 px-3 font-medium">Last Failure</th>
+                  <th className="py-2.5 px-3 font-medium">Compliance Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statusQuery.data.sources.map((s) => (
+                  <tr key={s.source_name} className="border-b border-lineSoft hover:bg-slate-50 transition-colors align-top">
+                    <td className="py-2.5 px-3">
+                      <div className="font-semibold text-ink">{s.label}</div>
+                      <div className="font-mono text-[11px] text-muted">{s.source_name}</div>
+                    </td>
+                    <td className="py-2.5 px-3 text-xs text-muted">{s.category}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeCls[s.status] ?? 'bg-slate-500/10 text-slate-500'}`}>
+                        {s.status}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className="text-xs">{fmt(s.last_success_at)}</span>
+                    </td>
+                    <td className="py-2.5 px-3 text-xs text-rose-600 max-w-[16rem]">{s.last_failure_reason ?? '\u2014'}</td>
+                    <td className="py-2.5 px-3 text-xs text-muted max-w-[18rem]">{s.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Recent Scraper Runs">
+        {runsQuery.loading && <LoadingState />}
+        {runsQuery.error && <ErrorState message={runsQuery.error} onRetry={runsQuery.refetch} />}
+        {runsQuery.data && runsQuery.data.length === 0 && <EmptyState message="No scraper runs yet." />}
+        {runsQuery.data && runsQuery.data.length > 0 && (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-muted border-b border-line bg-slate-50">
+                  <th className="py-2.5 px-3 font-medium">Source</th>
+                  <th className="py-2.5 px-3 font-medium">Status</th>
+                  <th className="py-2.5 px-3 font-medium">Started</th>
+                  <th className="py-2.5 px-3 font-medium">Rows</th>
+                  <th className="py-2.5 px-3 font-medium">Valid</th>
+                  <th className="py-2.5 px-3 font-medium">Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runsQuery.data.map((r) => (
+                  <tr key={r.id} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
+                    <td className="py-2.5 px-3 font-mono text-[11px] font-semibold text-ink">{r.source_name}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${runBadgeCls[r.status] ?? 'bg-slate-500/10 text-slate-500'}`}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600">{fmt(r.started_at)}</td>
+                    <td className="py-2.5 px-3 tabular-nums text-slate-600">{r.rows_collected}</td>
+                    <td className="py-2.5 px-3 tabular-nums text-slate-600">{r.rows_valid ?? '\u2014'}</td>
+                    <td className="py-2.5 px-3 text-muted max-w-[20rem] truncate">{r.error_message ?? '\u2014'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
   )
 }

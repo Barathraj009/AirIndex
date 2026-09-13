@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.rate_limit import RateLimitMiddleware
-from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin, alerts, reports, cpi_airfare, wpi_atf
+from app.api.routers import auth, dashboard, index, reference, fares, ingestion, backtesting, admin, exports, analytics, cpi, bulletin, alerts, reports, cpi_airfare, wpi_atf, scrapers
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,7 @@ app.include_router(alerts.router)
 app.include_router(reports.router)
 app.include_router(cpi_airfare.router)
 app.include_router(wpi_atf.router)
+app.include_router(scrapers.router)
 
 
 

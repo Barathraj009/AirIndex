@@ -54,3 +54,104 @@ def data_quality_summary(db: Session = Depends(get_db), _=Depends(require_permis
         report.issues = df.loc[df["quality_flags"].notna() & (df["quality_flags"] != ""),
                                 "quality_flags"].value_counts().index.tolist()
     return report.as_dict()
+
+
+@router.get("/fares/latest")
+def latest_fares(origin: str | None = None,
+                 destination: str | None = None,
+                 db: Session = Depends(get_db),
+                 _=Depends(require_permission("view_dashboard"))):
+    """Latest normalized fare per (route, airline, travel_date) — the
+    freshest white-labelled observations for the scraper monitor.
+
+    Uses VALID rows ordered by collection timestamp; returns the most
+    recent snapshot so the UI can show 'as of' fares without duplicate
+    historical rows.
+    """
+    from sqlalchemy import func
+
+    valid_statuses = ("VALID",)
+    base = (
+        db.query(
+            FareObservation.origin.label("origin"),
+            FareObservation.destination.label("destination"),
+            FareObservation.airline.label("airline"),
+            FareObservation.travel_date.label("travel_date"),
+            func.max(FareObservation.collection_timestamp).label("latest_collected"),
+        )
+        .filter(FareObservation.data_quality_status.in_(valid_statuses))
+        .group_by(FareObservation.origin, FareObservation.destination,
+                  FareObservation.airline, FareObservation.travel_date)
+    )
+    if origin:
+        base = base.filter(FareObservation.origin == origin)
+    if destination:
+        base = base.filter(FareObservation.destination == destination)
+
+    latest_snapshot = base.subquery()
+    rows = db.query(FareObservation).join(
+        latest_snapshot,
+        (FareObservation.origin == latest_snapshot.c.origin)
+        & (FareObservation.destination == latest_snapshot.c.destination)
+        & (FareObservation.airline == latest_snapshot.c.airline)
+        & (FareObservation.travel_date == latest_snapshot.c.travel_date)
+        & (FareObservation.collection_timestamp == latest_snapshot.c.latest_collected),
+    ).all()
+
+    return [
+        {
+            "origin": r.origin,
+            "destination": r.destination,
+            "airline": r.airline,
+            "flight_number": r.flight_number,
+            "travel_date": r.travel_date,
+            "total_fare": r.total_fare,
+            "base_fare": r.base_fare,
+            "taxes_fees": r.taxes_fees,
+            "currency": r.currency,
+            "booking_window_days": r.booking_window_days,
+            "source": r.source,
+            "source_type": r.source_type,
+            "collection_timestamp": r.collection_timestamp,
+        }
+        for r in rows
+    ][:500]
+
+
+@router.get("/fares/routes")
+def route_summaries(db: Session = Depends(get_db),
+                    _=Depends(require_permission("view_dashboard"))):
+    """Per-route fare summary for the Dashboard route basket — count,
+    valid count, median/min/max fare, and the freshest collection time."""
+    from sqlalchemy import func
+
+    rows = (
+        db.query(
+            FareObservation.origin.label("origin"),
+            FareObservation.destination.label("destination"),
+            func.count(FareObservation.id).label("n"),
+            func.sum(func.case((FareObservation.data_quality_status == "VALID", 1), else_=0)).label("n_valid"),
+            func.avg(FareObservation.total_fare).label("avg_fare"),
+            func.min(FareObservation.total_fare).label("min_fare"),
+            func.max(FareObservation.total_fare).label("max_fare"),
+            func.max(FareObservation.collection_timestamp).label("latest_collected"),
+        )
+        .group_by(FareObservation.origin, FareObservation.destination)
+        .order_by(FareObservation.origin, FareObservation.destination)
+        .all()
+    )
+
+    return [
+        {
+            "route": f"{r.origin}-{r.destination}",
+            "origin": r.origin,
+            "destination": r.destination,
+            "n": r.n,
+            "n_valid": r.n_valid or 0,
+            "avg_fare": r.avg_fare,
+            "min_fare": r.min_fare,
+            "max_fare": r.max_fare,
+            "latest_collected": r.latest_collected,
+        }
+        for r in rows
+    ]

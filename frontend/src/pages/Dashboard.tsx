@@ -1,10 +1,64 @@
 import { Area, AreaChart, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts'
-import { Plane, TrendingUp, CalendarDays } from 'lucide-react'
+import { Plane, TrendingUp, CalendarDays, Wifi } from 'lucide-react'
 import { useRef } from 'react'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, StatCard, Card, LoadingState, ErrorState, EmptyState, TrendPill } from '../components/ui'
 import { exportChartAsPNG, downloadCSV } from '../utils/exportChart'
-import type { CpiAirfareIndex, CpiAirfareTrend } from '../types'
+import type { CpiAirfareIndex, CpiAirfareTrend, ScraperStatusSummary } from '../types'
+
+function ScraperStatusStrip() {
+  const status = useApiQuery<ScraperStatusSummary>('/scrapers')
+
+  if (status.loading || status.error) return null
+  if (!status.data) return null
+
+  const sources = status.data.sources
+  const byStatus: Record<string, ScraperStatusSummary['sources']> = { LIVE: [], DEMO: [], MOCK: [], UNAVAILABLE: [] }
+  sources.forEach((s) => { (byStatus[s.status] ??= []).push(s) })
+  const shortLabels: Record<string, string> = {
+    MAKEMYTRIP_WEB: 'MakeMyTrip', YATRA_WEB: 'Yatra', EASEMYTRIP_WEB: 'EaseMyTrip',
+    CLEARTRIP_WEB: 'Cleartrip', IXIGO_WEB: 'ixigo', GOIBIBO_WEB: 'Goibibo',
+    INDIGO_WEB: 'IndiGo', AIR_INDIA_WEB: 'Air India', AIR_INDIA_EXPRESS_WEB: 'AI Express',
+    AKASA_WEB: 'Akasa', SPICEJET_WEB: 'SpiceJet',
+  }
+
+  const pill = (s: ScraperStatusSummary['sources'][number]) => {
+    const liveCls =
+      s.status === 'LIVE' ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
+      : s.status === 'DEMO' ? 'bg-amber-500/10 text-amber-700 border-amber-500/30'
+      : s.status === 'MOCK' ? 'bg-slate-500/10 text-slate-500 border-line'
+      : 'bg-rose-500/5 text-rose-600 border-line'
+    return (
+      <span key={s.source_name} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${liveCls}`}>
+        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+        {shortLabels[s.source_name] ?? s.label}
+      </span>
+    )
+  }
+
+  return (
+    <Card
+      title="Live Fare Scraper Status"
+      action={
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+          <Wifi size={12} />
+          {sources.length} sources · updated {new Date(status.data.as_of).toLocaleTimeString()}
+        </span>
+      }
+    >
+      <p className="pb-3 text-xs text-muted">
+        Compliance status of the airline and OTA scrapers. UNAVAILABLE = no compliant live path
+        (robots.txt / Terms); never scraped around.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {byStatus.LIVE.map(pill)}
+        {byStatus.DEMO.map(pill)}
+        {byStatus.MOCK.map(pill)}
+        {byStatus.UNAVAILABLE.map(pill)}
+      </div>
+    </Card>
+  )
+}
 
 export default function Dashboard() {
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
@@ -98,6 +152,9 @@ export default function Dashboard() {
           icon={<TrendingUp size={18} />}
         />
       </div>
+
+      {/* Scraper availability strip */}
+      <ScraperStatusStrip />
 
       {/* Trend chart */}
       {trendData.length > 0 && (
