@@ -34,7 +34,7 @@ class WpiAtfIndex(Base):
     source = Column(String(50), default="MOSPI_WPI")
     source_url = Column(String(200), default="https://esankhyiki.mospi.gov.in")
     wpi_code = Column(String(20), default="1202010004")
-    base_year = Column(String(10), default="2022-23=100")
+    base_year = Column(String(10), default="2022-23")
 
     # Audit
     fetched_at = Column(DateTime(timezone=True), nullable=False)

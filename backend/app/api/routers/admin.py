@@ -97,7 +97,20 @@ def update_user_role(user_id: int, payload: UserRoleUpdate, db: Session = Depend
 @router.post("/calibrate-weights-dgca")
 def calibrate_weights_dgca(db: Session = Depends(get_db), current_user=Depends(require_permission("manage_route_weights"))):
     from app.models.reference import Route
+    from app.models.dgca import DgcaTrafficRecord
     from app.services.dgca_service import get_calibrated_route_weights
+    from app.services.scheduler_service import run_dgca_traffic_refresh
+
+    # Ensure the DGCA traffic table is fresh before calibrating (idempotent
+    # upsert of the official bundled dataset; entirely local, no network).
+    refreshed = False
+    try:
+        run_dgca_traffic_refresh()
+        refreshed = True
+    except Exception:  # noqa: BLE001 - calibration must never fail on refresh
+        pass
+
+    traffic_count = db.query(DgcaTrafficRecord).count()
 
     active_routes = db.query(Route).filter(Route.active == True).all()  # noqa: E712
     route_keys = [r.route_key for r in active_routes]
@@ -109,8 +122,38 @@ def calibrate_weights_dgca(db: Session = Depends(get_db), current_user=Depends(r
 
     db.add(AuditLogEntry(user_id=current_user.id, user_email=current_user.email,
                           action="CALIBRATE_ROUTE_WEIGHTS_DGCA", entity_type="Route",
-                          details={"calibrated_routes_count": len(active_routes)}))
+                          details={"calibrated_routes_count": len(active_routes),
+                                   "traffic_records": traffic_count}))
     db.commit()
-    return {"status": "success", "calibrated_weights": calibrated}
+    return {
+        "status": "success",
+        "calibrated_weights": calibrated,
+        "traffic_source": "dgca_route_traffic" if refreshed else "bundled_dataset",
+        "traffic_records": traffic_count,
+    }
+
+
+@router.get("/dgca-traffic")
+def list_dgca_traffic(db: Session = Depends(get_db), _=Depends(require_permission("manage_route_weights"))):
+    from app.models.dgca import DgcaTrafficRecord
+
+    rows = db.query(DgcaTrafficRecord).order_by(DgcaTrafficRecord.passengers.desc()).all()
+    return {
+        "available": bool(rows),
+        "period": rows[0].period if rows else None,
+        "source": rows[0].source if rows else None,
+        "count": len(rows),
+        "records": [
+            {
+                "route_key": r.route_key,
+                "origin": r.origin,
+                "destination": r.destination,
+                "passengers": r.passengers,
+                "source_url": r.source_url,
+                "fetched_at": r.fetched_at.isoformat() if r.fetched_at else None,
+            }
+            for r in rows
+        ],
+    }
 
 

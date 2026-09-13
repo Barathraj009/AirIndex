@@ -27,8 +27,8 @@ BASE_META = {
 
 def _last_refresh_outcome() -> dict | None:
     """Surface the most recent MoSPI WPI refresh outcome (diagnostics)."""
-    from app.services.scheduler_service import LAST_MOSPI_REFRESH
-    return LAST_MOSPI_REFRESH.get("wpi_atf")
+    from app.services.scheduler_service import REFRESH_OUTCOMES
+    return REFRESH_OUTCOMES.get("wpi_atf")
 
 
 @router.get("/series")

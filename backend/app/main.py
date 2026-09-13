@@ -15,18 +15,22 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-def _bootstrap_mospi_refresh() -> None:
-    """First-run CPI + WPI bootstrap. Runs on a background thread so a slow
-    MoSPI response never blocks app startup or the scheduler thread pool.
-    Failures are logged (not fatal) and the daily cron retries."""
-    from app.services.scheduler_service import run_cpi_refresh, run_wpi_atf_refresh
+def _bootstrap_external_refresh() -> None:
+    """First-run CPI, WPI and DGCA bootstrap. Runs on a background thread so a
+    slow MoSPI response never blocks app startup or the scheduler thread pool.
+    Failures are logged (not fatal) and the scheduled jobs retry."""
+    from app.services.scheduler_service import run_cpi_refresh, run_wpi_atf_refresh, run_dgca_traffic_refresh
 
-    for name, runner in (("CPI", run_cpi_refresh), ("WPI ATF", run_wpi_atf_refresh)):
+    for name, runner in (
+        ("CPI", run_cpi_refresh),
+        ("WPI ATF", run_wpi_atf_refresh),
+        ("DGCA traffic", run_dgca_traffic_refresh),
+    ):
         try:
             runner()
-            logger.info("MoSPI %s bootstrap refresh completed", name)
+            logger.info("%s bootstrap refresh completed", name)
         except Exception:  # noqa: BLE001 - fixture failure must not crash app
-            logger.exception("MoSPI %s bootstrap refresh failed; daily cron will retry", name)
+            logger.exception("%s bootstrap refresh failed; scheduled job will retry", name)
 
 
 @asynccontextmanager
@@ -39,9 +43,9 @@ async def lifespan(app: FastAPI):
     start_scheduler(settings.ingestion_schedule_cron, enabled=scheduler_enabled)
 
     if scheduler_enabled:
-        # First-run MoSPI bootstrap on a background thread so the tables are
-        # populated even before the first daily refresh fires.
-        threading.Thread(target=_bootstrap_mospi_refresh, name="mospi-bootstrap", daemon=True).start()
+        # First-run CPI/WPI/DGCA bootstrap on a background thread so the tables
+        # are populated even before the first scheduled refresh fires.
+        threading.Thread(target=_bootstrap_external_refresh, name="external-bootstrap", daemon=True).start()
 
     try:
         yield

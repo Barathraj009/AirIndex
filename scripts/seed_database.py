@@ -101,6 +101,15 @@ def seed():
             db.commit()
             print("Seeded DGCA and demonstration benchmark reference datasets.")
 
+        from app.models.dgca import DgcaTrafficRecord
+        from ingestion.adapters.dgca_traffic import fetch_dgca_traffic_records
+
+        if db.query(DgcaTrafficRecord).count() == 0:
+            for rec in fetch_dgca_traffic_records():
+                db.add(DgcaTrafficRecord(**rec))
+            db.commit()
+            print(f"Seeded {db.query(DgcaTrafficRecord).count()} DGCA city-pair traffic records.")
+
 
         raw = generate_demo_observations(start_date=date(2026, 1, 1), n_months=6)
         clean_df, report = run_pipeline(raw, source="DEMO_SIMULATED", source_type="DEMO_SIMULATED")

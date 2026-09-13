@@ -21,13 +21,13 @@ from app.services.ingestion_runner import collect_from_sources
 
 logger = logging.getLogger(__name__)
 
-# Last MoSPI refresh outcome per source key (e.g. "wpi_atf", "cpi").
+# Last refresh outcome per source key (e.g. "wpi_atf", "cpi", "dgca_traffic").
 # Populated by refresh runners so the API can surface *_last_refresh_error.
-LAST_MOSPI_REFRESH: dict[str, dict] = {}
+REFRESH_OUTCOMES: dict[str, dict] = {}
 
 
-def _record_mospi_outcome(source: str, error: Exception | None, n_records: int | None = None) -> None:
-    LAST_MOSPI_REFRESH[source] = (
+def _record_refresh_outcome(source: str, error: Exception | None, n_records: int | None = None) -> None:
+    REFRESH_OUTCOMES[source] = (
         {"ok": True, "ts": time.time(), "records": n_records}
         if error is None
         else {"ok": False, "ts": time.time(), "error": f"{type(error).__name__}: {error}"}
@@ -42,7 +42,7 @@ def _fetch_with_retry(fetcher, source: str, retries: int = 3) -> list:
     for attempt in range(retries):
         try:
             result = fetcher()
-            _record_mospi_outcome(source, None, n_records=len(result))
+            _record_refresh_outcome(source, None, n_records=len(result))
             return result
         except Exception as exc:  # noqa: BLE001 - retry any transient failure
             last_exc = exc
@@ -50,7 +50,7 @@ def _fetch_with_retry(fetcher, source: str, retries: int = 3) -> list:
                 logger.warning("MoSPI %s fetch attempt %d/%d failed: %s; retrying", source, attempt + 1, retries, exc)
                 time.sleep(delays[min(attempt, len(delays) - 1)])
     logger.error("MoSPI %s fetch failed after %d attempts: %s", source, retries, last_exc)
-    _record_mospi_outcome(source, last_exc)
+    _record_refresh_outcome(source, last_exc)
     raise last_exc  # type: ignore[misc]
 
 
@@ -88,7 +88,7 @@ def run_cpi_refresh() -> None:
         db.commit()
     except Exception as exc:  # noqa: BLE001 - CPI refresh failure must not kill scheduler
         db.rollback()
-        _record_mospi_outcome("cpi", exc)
+        _record_refresh_outcome("cpi", exc)
         raise
     finally:
         db.close()
@@ -114,7 +114,39 @@ def run_wpi_atf_refresh() -> None:
         db.commit()
     except Exception as exc:  # noqa: BLE001 - WPI refresh failure must not kill scheduler
         db.rollback()
-        _record_mospi_outcome("wpi_atf", exc)
+        _record_refresh_outcome("wpi_atf", exc)
+        raise
+    finally:
+        db.close()
+
+
+def run_dgca_traffic_refresh() -> None:
+    """Upsert the official DGCA city-pair traffic table from the adapter.
+
+    The DGCA dataset is bundled with the repository (official published
+    figures), so this is a local DB operation — no network involved.
+    """
+    db = SessionLocal()
+    try:
+        from ingestion.adapters.dgca_traffic import fetch_dgca_traffic_records
+        from app.models.dgca import DgcaTrafficRecord
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        records = fetch_dgca_traffic_records()
+        inserted = 0
+        for rec in records:
+            result = db.execute(
+                pg_insert(DgcaTrafficRecord)
+                .values(**rec)
+                .on_conflict_do_nothing(index_elements=[DgcaTrafficRecord.route_key])
+            )
+            inserted += result.rowcount
+        db.commit()
+        _record_refresh_outcome("dgca_traffic", None, n_records=len(records))
+        logger.info("DGCA traffic refresh: %d upserted", len(records))
+    except Exception as exc:  # noqa: BLE001 - DGCA refresh failure must not kill scheduler
+        db.rollback()
+        _record_refresh_outcome("dgca_traffic", exc)
         raise
     finally:
         db.close()
@@ -159,6 +191,18 @@ def start_scheduler(cron_expr: str, enabled: bool = True) -> bool:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,
+    )
+    # Refresh DGCA city-pair traffic monthly on the 1st (06:20 UTC) so route
+    # calibrations always use the latest official published figures.
+    scheduler.add_job(
+        run_dgca_traffic_refresh,
+        CronTrigger(day=1, hour=6, minute=20),
+        id="dgca_traffic_refresh",
+        name="Refresh DGCA city-pair passenger traffic",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600 * 24,
     )
     scheduler.start()
     return True
