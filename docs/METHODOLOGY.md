@@ -76,43 +76,17 @@ per spec section 4/10.
 
 ## Known limitation / area for review
 
-The route weights currently shipped in `demo_data_generator.ROUTE_BASKET`
-are **illustrative**, loosely proportional to approximate trunk-route
-traffic share — they are not official MoSPI/DGCA passenger-traffic
-weights. Before any real presentation of index *levels* as
-policy-relevant, the team should source actual route-level traffic
-share data (DGCA publishes domestic sector-wise passenger data at
-https://www.dgca.gov.in — see "आंकड़े और रिपोर्ट" → "घरेलू विमान परिवहन" →
-"मासिक आंकड़े") to calibrate `route_weights` properly. That specific
-deep-linked page turned out to be a JS-driven portal that doesn't
-resolve to a data table via a plain HTTP fetch — it needs interactive
-navigation, which wasn't accessible in this build session. The
-*methodology* (steps 1–7 above) is independent of which specific
-weights are plugged in.
+The route weights currently shipped in
+`app.services.route_basket.ROUTE_BASKET` are **proportional to
+approximate all-India domestic trunk-route traffic share** — they are
+not official passenger-traffic weights. Before any real
+presentation of index *levels* as policy-relevant, the team should
+source actual route-level traffic share data to calibrate
+`route_weights` properly. The *methodology* (steps 1–7 above) is
+independent of which specific weights are plugged in, and ADMIN users
+can override weights via the routes table/API without a code change.
 
-Airline-level weighting is **not** on the same footing: `AIRLINES` in
-`demo_data_generator.py` now uses real, cited August 2026 DGCA domestic
-market share (IndiGo 64.2%, Air India Group 27.3%, Akasa Air 5.4%,
-SpiceJet 2%, per DGCA's monthly traffic report as covered by Deccan
-Herald), so the demo data's airline mix is grounded in a real reported
-number, not a guess. The Air India / Air India Express split within
-the 27.3% group figure is still an estimate, since the source found
-reports the group combined.
-
-## Real reference data point for backtesting
-
-One real, citable data point was found during this build: per DGCA
-data reported to the Rajya Sabha (Minister of State for Civil Aviation
-Murlidhar Mohol, per Millennium Post's coverage, July 2026), **average
-domestic airfare rose approximately 20.5% across 72 domestic routes,
-comparing June 2026 to March 2025.** The underlying 72 routes weren't
-disclosed in that reply, and this is a single two-point aggregate
-comparison rather than a monthly time series — it's not enough on its
-own to populate a meaningful `DGCA_MONTHLY_AVG` reference series (that
-would require the actual monthly average-fare figures DGCA holds
-internally, not just this one aggregate comparison), so
-`ReferenceDataPoint` rows for `DGCA_MONTHLY_AVG` are still empty by
-design rather than backfilled with an invented monthly path. This one
-real figure is at least a plausible sanity check: whatever the
-backtesting page eventually loads as real DGCA data, a ~20% rise over
-that 15-month window is the ballpark to expect.
+Airline-level contribution is computed from the **observed live fare
+data itself** (each airline weighted by its share of valid
+observations in the current period, as disclosed in section 5) — it is
+a transparent proxy and never presented as true market-share weighting.

@@ -42,24 +42,13 @@ def _clip(text, limit):
 def _adapter_registry():
     # Late import so this module stays importable in offline/test contexts
     # without the root-level `ingestion` package on sys.path.
-    from ingestion.adapters.demo_adapter import DemoAdapter
     from ingestion.adapters.gds_adapter import GdsAdapter
-    from ingestion.adapters.metasearch_adapter import MetasearchAdapter
     from ingestion.adapters.mospi_adapter import MospiCpiAdapter
-    from ingestion.adapters.kiwi_adapter import KiwiFlightAdapter
     from ingestion.adapters.base import CollectionRequest
-    from ingestion.scrapers.sources import SOURCE_REGISTRY
-    from ingestion.scrapers.web_scrapers import WEB_SCRAPER_REGISTRY
 
     registry = dict(ADAPTER_REGISTRY)
-    registry.setdefault("DEMO_GENERATOR", DemoAdapter)
     registry.setdefault("GOOGLE_FLIGHTS_API", GdsAdapter)
-    registry.setdefault("GOOGLE_FLIGHTS", MetasearchAdapter)
     registry.setdefault("MOSPI_CPI", MospiCpiAdapter)
-    registry.setdefault("KIWI_FLIGHTS", KiwiFlightAdapter)
-    # 11 web sources (5 airlines + 6 OTAs) named in the scraping spec.
-    for spec in SOURCE_REGISTRY:
-        registry.setdefault(spec.source_name, WEB_SCRAPER_REGISTRY.get(spec.source_name))
     return registry, CollectionRequest
 
 

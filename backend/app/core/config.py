@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     # INGESTION_SCHEDULE_CRON (e.g. "0 6 * * 1" weekly) to fit a quota.
     ingestion_schedule_cron: str = "0 6 * * *"
 
-    scraper_user_agent: str = "AirIndexIndiaBot/1.0"
-    scraper_min_delay_seconds: float = 5.0
-
     # RapidAPI key for the Google Flights fare adapter (gds_adapter).
     rapidapi_key: str = ""
     # google-flights8 returns calendar prices in USD only; the live adapter

@@ -1,35 +1,25 @@
-"""
-Seed script — loads the route basket, demo fare data, a default admin
+"""Seed script — loads the route basket, real data sources, a default admin
 user, and an active index configuration into the database.
 
-Usage (once `pip install -r backend/requirements.txt` succeeds and
-Postgres is running / migrated):
+Usage (once `pip install -r backend/requirements.txt` succeeds):
 
     PYTHONPATH=.:./backend python3 scripts/seed_database.py
-
-This is written against the real SQLAlchemy models
-(backend/app/models/*.py) and was execution-verified during the 2026-09
-rebuild (alembic migrations via a fresh autogenerate baseline, then this
-script against local PostgreSQL 16.8): 16 routes, DEMO_GENERATOR data
-source, default admin user, 7330 fare observations (~95% VALID), airlines
-derived from observed data, and an active index config. See
-tests/test_db_schema.py::build_seeded_db for the closest offline
-verification (SQLite translation of the schema with real generated data).
 """
 
 import os
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app.core.database import SessionLocal, engine
+from app.core.database import engine, SessionLocal
 from app.core.json_safe import records_json_safe
 from app.core.security import hash_password
 from app.models import Base, Route, DataSource, User, IndexConfigModel, Airline
-from app.services.demo_data_generator import ROUTE_BASKET, generate_demo_observations
+from app.services.route_basket import ROUTE_BASKET
+from app.services.replay_data import google_flights_replay
 from app.services.data_processing import run_pipeline
 from app.models.observations import FareObservation
 from app.services.index_engine import METHODOLOGY_VERSION
@@ -40,33 +30,18 @@ def seed():
     db = SessionLocal()
     try:
         if db.query(Route).count() == 0:
-            for route, (weight, _, tier) in ROUTE_BASKET.items():
+            for route, (weight, tier) in ROUTE_BASKET.items():
                 origin, dest = route.split("-")
                 db.add(Route(origin=origin, destination=dest, weight=weight, distance_tier=tier))
             print(f"Seeded {len(ROUTE_BASKET)} routes.")
 
         sources_to_seed = [
-            ("DEMO_GENERATOR", "DEMO_SIMULATED"),
             ("GOOGLE_FLIGHTS_API", "LIVE_SCRAPE"),
-            ("GOOGLE_FLIGHTS", "LIVE_SCRAPE"),
             ("MOSPI_CPI", "PUBLIC_DATASET"),
-            ("KIWI_FLIGHTS", "LIVE_SCRAPE"),
         ]
-        # The 11 web sources named in the scraping spec (5 airlines + 6
-        # OTAs). Seeded as LIVE_SCRAPE so the Scraper Monitor lists them
-        # with their honest UNAVAILABLE status; each adapter re-checks
-        # robots.txt at runtime and degrades to SOURCE_UNAVAILABLE.
-        from ingestion.scrapers.sources import SOURCE_REGISTRY
-        for spec in SOURCE_REGISTRY:
-            sources_to_seed.append((spec.source_name, "LIVE_SCRAPE"))
-
         for sname, stype in sources_to_seed:
             if db.query(DataSource).filter(DataSource.name == sname).first() is None:
-                base_url = next(
-                    (s.base_url for s in SOURCE_REGISTRY if s.source_name == sname),
-                    None,
-                )
-                db.add(DataSource(name=sname, source_type=stype, active=True, base_url=base_url))
+                db.add(DataSource(name=sname, source_type=stype, active=True))
                 print(f"Seeded {sname} data source.")
 
         admin_email = os.getenv("SEED_ADMIN_EMAIL", "admin@airindex.gov.in")
@@ -77,14 +52,8 @@ def seed():
             if admin_password in ("change-me-immediately", "analyst123", "viewer123", "", "1234"):
                 db.close()
                 raise RuntimeError(
-                    "Refusing to seed in production with a default/guardable admin "
-                    "password. Set SEED_ADMIN_PASSWORD to a strong unique value."
-                )
-            if admin_password == admin_email.split("@")[0]:
-                db.close()
-                raise RuntimeError(
-                    "Refusing to seed in production: SEED_ADMIN_PASSWORD must not "
-                    "equal the email local part."
+                    "Refusing to seed in production with a default admin password. "
+                    "Set SEED_ADMIN_PASSWORD to a strong unique value."
                 )
 
         users_to_seed = [
@@ -97,40 +66,19 @@ def seed():
                 db.add(User(email=uemail, hashed_password=hash_password(upass), role=urole))
                 print(f"Seeded user ({uemail}, {urole}).")
 
-        from app.models.backtesting import ReferenceDataPoint
-        from app.services.dgca_service import DGCA_HISTORICAL_BENCHMARK
+        import pandas as pd
 
-        if db.query(ReferenceDataPoint).count() == 0:
-            for dataset in ["DGCA_MONTHLY_AVG", "DGCA_DOMESTIC_BENCHMARK", "DEMO_REFERENCE"]:
-                for period, val in DGCA_HISTORICAL_BENCHMARK.items():
-                    factor = 1.0 if "DGCA" in dataset else 1.015
-                    db.add(ReferenceDataPoint(
-                        dataset_name=dataset,
-                        period=period,
-                        value=round(val * factor, 2),
-                        label="ALL_INDIA_AVG",
-                    ))
-            db.commit()
-            print("Seeded DGCA and demonstration benchmark reference datasets.")
-
-        from app.models.dgca import DgcaTrafficRecord
-        from ingestion.adapters.dgca_traffic import fetch_dgca_traffic_records
-
-        if db.query(DgcaTrafficRecord).count() == 0:
-            for rec in fetch_dgca_traffic_records():
-                db.add(DgcaTrafficRecord(**rec))
-            db.commit()
-            print(f"Seeded {db.query(DgcaTrafficRecord).count()} DGCA city-pair traffic records.")
-
-
-        raw = generate_demo_observations(start_date=date(2026, 1, 1), n_months=6)
-        clean_df, report = run_pipeline(raw, source="DEMO_SIMULATED", source_type="DEMO_SIMULATED")
+        raw = pd.DataFrame(google_flights_replay())
+        # Coerce numeric replay columns (CSV round-trips them as strings).
+        for col in ("booking_window_days", "base_fare", "taxes_fees", "total_fare"):
+            if col in raw.columns:
+                raw[col] = pd.to_numeric(raw[col], errors="coerce")
+        clean_df, report = run_pipeline(raw, source="GOOGLE_FLIGHTS_API", source_type="LIVE_SCRAPE")
         rows = clean_df.to_dict("records")
 
         if db.query(Airline).count() == 0:
             known_iata = {"IndiGo": "6E", "Air India": "AI", "Air India Express": "IX",
-                          "Akasa Air": "QP", "SpiceJet": "SG", "Vistara": "UK",
-                          "Go First": "G8", "Alliance Air": "9I"}
+                          "Akasa Air": "QP", "SpiceJet": "SG", "Vistara": "UK"}
             for name in sorted(clean_df["airline"].dropna().unique()):
                 db.add(Airline(name=name, iata_code=known_iata.get(name), active=True))
             db.commit()
@@ -141,11 +89,6 @@ def seed():
                 {k: r[k] for k in r if k in FareObservation.__table__.columns.keys()}
                 for r in rows
             ])
-            # records_json_safe serialises dates/timestamps to ISO strings,
-            # which PostgreSQL coerces back on insert but SQLite's strict
-            # Date/DateTime column types do not. Coerce explicitly so the
-            # seed works against both database dialects.
-            from datetime import datetime as _datetime
             coerced_rows = []
             for r in cleaned_rows:
                 r = dict(r)
@@ -154,7 +97,7 @@ def seed():
                     r["travel_date"] = date.fromisoformat(td[:10])
                 ts = r.get("collection_timestamp")
                 if isinstance(ts, str):
-                    r["collection_timestamp"] = _datetime.fromisoformat(
+                    r["collection_timestamp"] = datetime.fromisoformat(
                         ts.replace("Z", "+00:00")
                     )
                 coerced_rows.append(r)
@@ -162,7 +105,7 @@ def seed():
             db.commit()
             print(f"Seeded {len(rows)} fare observations ({report.as_dict()}).")
         else:
-            print(f"fare_observations already populated ({db.query(FareObservation).count()} rows); skipping observation seed.")
+            print(f"fare_observations already populated ({db.query(FareObservation).count()} rows); skipping.")
 
         if db.query(IndexConfigModel).filter(IndexConfigModel.is_active == True).first() is None:  # noqa: E712
             periods = sorted(clean_df["travel_date"].str[:7].unique())

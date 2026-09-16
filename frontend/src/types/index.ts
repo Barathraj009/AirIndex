@@ -85,7 +85,7 @@ export interface FareObservation {
   total_fare: number | null
   availability_status: string
   source: string
-  source_type: 'LIVE_SCRAPE' | 'PUBLIC_DATASET' | 'DEMO_SIMULATED' | string
+  source_type: 'LIVE_SCRAPE' | 'PUBLIC_DATASET' | string
   data_quality_status: 'VALID' | 'SUSPICIOUS' | 'INVALID' | 'UNAVAILABLE' | string
   quality_flags: string | null
 }
@@ -175,33 +175,6 @@ export interface CpiPoint {
   inflation_delta_bps: number
 }
 
-export interface CpiSimulationResponse {
-  airfare_weight_pct: number
-  transport_weight_pct: number
-  points: CpiPoint[]
-  mean_headline_delta_bps: number
-  max_headline_delta_bps: number
-  lag_reduction_days_est: number
-  policy_summary: string
-  is_simulation?: boolean
-  inputs_note?: string
-}
-
-export interface FareAnomaly {
-  route: string
-  origin: string
-  destination: string
-  airline: string
-  travel_date: string
-  booking_window_days: number | null
-  observed_fare: number
-  route_median_fare: number
-  deviation_pct: number
-  anomaly_type: string
-  severity: 'HIGH' | 'MEDIUM' | 'LOW'
-  description: string
-}
-
 // MoSPI CPI Airfare Index types
 export interface CpiAirfareIndex {
   available: boolean
@@ -255,100 +228,12 @@ export interface CpiForecastResult {
   base_year?: string
 }
 
-// MoSPI WPI ATF (Aviation Turbine Fuel) types
-export interface WpiAtfPoint {
-  period: string
-  atf_index: number
-  inflation_mom: number | null
-  inflation_yoy: number | null
-}
-
-export interface WpiAtfSeries {
-  available: boolean
-  series: WpiAtfPoint[]
-  base_year: string
-  source: string
-  wpi_code: string
-}
-
-export interface FuelVsAirfarePoint {
-  period: string
-  airfare_index: number
-  atf_index: number
-  airfare_rebased: number | null
-  atf_rebased: number | null
-}
-
-export interface FuelVsAirfare {
-  available: boolean
-  rebase_period: string | null
-  series: FuelVsAirfarePoint[]
-  note: string | null
-  atf_base_year: string
-  airfare_base_year: string
-}
-
-// Web-scraping framework (Phase 9 Dashboard / Scraper Monitor)
-export type ScraperSourceStatus = 'LIVE' | 'DEMO' | 'MOCK' | 'UNAVAILABLE'
-
-export interface RobotsVerdict {
-  allowed: boolean
-  reason: string | null
-  crawl_delay_seconds: number | null
-  checked_at: number
-}
-
-export interface ScraperSource {
-  source_name: string
+export interface SourceStatusItem {
+  name: string
   label: string
-  category: 'AIRLINE' | 'OTA' | 'API' | 'DATASET' | 'DEMO' | string
-  base_url: string
-  robots_url: string
-  status: ScraperSourceStatus
-  reason: string | null
-  fare_search_path: string | null
-  demo_fallback: string | null
-  notes: string[] | null
-  robots_check: RobotsVerdict | null
-  last_run_status: string | null
-  last_run_at: string | null
+  active: boolean
   last_success_at: string | null
   last_failure_reason: string | null
-  as_of: string
-}
-
-export interface LiveFeedStatus {
-  source_name: string
-  label: string
-  category: string
-  base_url: string
-  status: string
-  reason: string | null
-  last_run_status: string | null
-  last_success_at: string | null
-  last_failure_reason: string | null
-  as_of: string
-}
-
-export interface ScraperStatusSummary {
-  sources: ScraperSource[]
-  live_feeds: LiveFeedStatus[]
-  summary: {
-    total: number
-    by_status: Record<ScraperSourceStatus, number>
-  }
-  as_of: string
-}
-
-export interface ScraperRunRow {
-  id: number
-  source_name: string
-  status: 'RUNNING' | 'SUCCESS' | 'SOURCE_UNAVAILABLE' | 'FAILED' | string
-  started_at: string
-  completed_at: string | null
-  rows_collected: number
-  rows_valid: number | null
-  error_message: string | null
 }
 
 export interface LatestFare {

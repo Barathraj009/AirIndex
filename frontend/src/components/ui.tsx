@@ -62,35 +62,6 @@ export function Card({ title, children, className = '', action }: { title?: Reac
   )
 }
 
-const SOURCE_LABEL_STYLES: Record<string, string> = {
-  LIVE_SCRAPE: 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30',
-  PUBLIC_DATASET: 'bg-brand-500/10 text-brand-700 border border-brand-500/30',
-  DEMO_SIMULATED: 'bg-amber-500/10 text-amber-700 border border-amber-500/30',
-  SOURCE_UNAVAILABLE: 'bg-rose-500/10 text-rose-700 border border-rose-500/30',
-}
-
-export function SourceBadge({ sourceType }: { sourceType: string }) {
-  const style = SOURCE_LABEL_STYLES[sourceType] ?? 'bg-slate-500/10 text-slate-600 border border-slate-500/30'
-  return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-bold tracking-wide px-2.5 py-1 rounded-full ${style}`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
-      {sourceType.replace(/_/g, ' ')}
-    </span>
-  )
-}
-
-const QUALITY_STYLES: Record<string, string> = {
-  VALID: 'bg-emerald-500/10 text-emerald-700',
-  SUSPICIOUS: 'bg-amber-500/10 text-amber-700',
-  INVALID: 'bg-rose-500/10 text-rose-700',
-  UNAVAILABLE: 'bg-slate-500/10 text-slate-500',
-}
-
-export function QualityBadge({ status }: { status: string }) {
-  const style = QUALITY_STYLES[status] ?? 'bg-slate-500/10 text-slate-500'
-  return <span className={`inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full ${style}`}>{status}</span>
-}
-
 export function Skeleton({ className = 'h-4' }: { className?: string }) {
   return <div className={`animate-pulse-soft rounded-md bg-lineSoft ${className}`} />
 }

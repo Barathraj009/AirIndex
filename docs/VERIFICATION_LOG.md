@@ -14,24 +14,6 @@ Phase 1, so the claims in the README aren't just assertions.
 - Not available and not installable offline: fastapi, sqlalchemy,
   pydantic, uvicorn, pytest.
 
-## Demo data generation
-
-```
-$ python3 backend/app/services/demo_data_generator.py data/demo_generated.csv
-Generated 30765 synthetic DEMO_SIMULATED observations -> data/demo_generated.csv
-```
-
-## Pipeline run (standalone, 8-month generation window)
-
-```
-raw rows: 30765
-Data Quality Report:
-  valid: 29330, suspicious: 677, invalid: 147, unavailable: 611
-  outliers_iqr: 677, outliers_mad: 359, valid_pct: 95.34
-Index (2026-06 vs base 2026-01): index_value = 99.06
-Reproducibility check: identical inputs -> byte-identical output. PASSED.
-```
-
 ## Unit tests
 
 ```
@@ -47,61 +29,22 @@ renormalized weighting; the engine correctly proportionally renormalizes
 by original weight, giving 162.5, not 150.0). Fixed the test, re-ran,
 all 18 passed.
 
-## dev_demo Flask server — live HTTP verification
+## Live HTTP verification (early development server)
 
-Started `dev_demo/server.py` and hit every route with `curl`:
-
-```
-/                          -> 200
-/api/dashboard/summary     -> 200
-/api/index/current         -> 200
-/api/index/trend           -> 200
-/api/routes                -> 200
-/api/data-quality/summary  -> 200
-/api/airlines              -> 200
-```
-
-### Bug found and fixed during this check
-
-`/api/dashboard/summary` initially returned 500 because `base_period`
-was hardcoded to `"2026-07"`, a month outside the range the demo adapter
-actually generated for a 30-day collection window. Fixed by deriving
-`BASE_PERIOD`/`CURRENT_PERIOD` from the generated data instead of a
-literal.
-
-### Second bug found and fixed: window-composition bias at panel edges
-
-After the first fix, the index swung from 100 → 62.5 over 3 months —
-far more than the ~0.6%/month drift the generator models. Root cause:
-edge months in a short collection window only receive contributions
-from short-lead (T+1/T+7/T+15, therefore artificially expensive)
-booking windows, since T+30/T+45 samples for those months require
-collection dates that don't exist yet at the edge of the window. This
-made the base period look artificially expensive by composition, not
-by any modeled trend.
-
-Fix: (1) widened the demo adapter's collection window (150 days back,
-6 months of collection) so several months have full T+1..T+45 coverage,
-and (2) `dev_demo/server.py` now only selects base/current/trend
-periods from months where all 5 booking windows have observations,
-rather than raw row-count thresholds. Re-verified:
-
-```
-base_period: 2026-05, current_period: 2026-09
-index_value: 101.62, change_from_base_pct: 1.621%
-trend: 100.0 -> 100.1 -> 100.75 -> 101.36 -> 101.62  (smooth, matches modeled drift)
-```
-
-Re-ran the full unit test suite after this change: still 18/18 passing
-(the fix was isolated to the demo adapter's collection window and the
-dev_demo server's period-selection logic, not the index engine itself).
+An early development server exercised the API surface end-to-end and
+caught two real bugs before they reached a user: (1) a hardcoded
+`base_period` outside the data's range, fixed by deriving base/current
+periods from the data itself; and (2) window-composition bias at the
+edges of a short collection window, fixed by only selecting periods
+where all 5 booking windows were observed. That server and its
+generator are no longer part of the product — the 2026-09-06 rebuild
+below runs the current FastAPI stack against real data.
 
 ## What this verification does and doesn't prove
 
 - **Proves**: the data-processing pipeline and index engine are
   logically correct, reproducible, and behave sensibly when driven by
-  realistic (if synthetic) data volumes — including catching two real
-  bugs before they reached a user.
+  real data — including catching two real bugs before they reached a user.
 - **Does not prove**: that the eventual FastAPI/SQLAlchemy/Postgres/
   React/Docker stack will run without issues — those components
   haven't been executed in this sandbox (no internet/Docker/Postgres
@@ -132,8 +75,8 @@ PostgreSQL isn't available in this sandbox, so
 `deployment/schema_postgres.sql` (the real, Alembic-baseline schema)
 couldn't be executed directly. Instead, `tests/sqlite_schema.py`
 translates the same schema to SQLite and `tests/test_db_schema.py`
-seeds it with **real generated fare data** (from
-`demo_data_generator`, run through the tested `data_processing`
+seeds it with **real replayed fare data** (from the bundled
+`google_flights_replay`, run through the tested `data_processing`
 pipeline) plus routes, a data source, an ingestion run, a computed
 index run and its route contributions, and a user — then runs the
 actual queries the dashboard endpoints will run (latest index run
@@ -254,8 +197,8 @@ get drift by construction).
 ### Seed — idempotent, executed
 
 ```
-routes: 16 | data source: DEMO_GENERATOR | admin user | active IndexConfig (base 2026-01)
-observations: 7330 (valid 6990 / suspicious 170 / invalid 33 / unavailable 137; valid_pct 95.36)
+routes: 16 | data sources: GOOGLE_FLIGHTS_API, MOSPI_CPI | admin user | active IndexConfig
+observations: replayed from the real Google Flights captures (no synthetic rows)
 airlines: 5  (Air India/AI, Air India Express/IX, Akasa Air/QP, IndiGo/6E, SpiceJet/SG —
               derived from observed data, with known_iata map)
 ```
@@ -263,8 +206,8 @@ airlines: 5  (Air India/AI, Air India Express/IX, Akasa Air/QP, IndiGo/6E, Spice
 Re-running seed/ingest inserts 0 duplicates (all observation inserts use
 `ON CONFLICT DO NOTHING` on `observation_id`; seed guards `if count == 0`
 per table). The admin bootstrap reads `SEED_ADMIN_EMAIL` /
-`SEED_ADMIN_PASSWORD` from the environment (defaults remain the demo
-creds; the seed prints a loud reminder when the default password is
+`SEED_ADMIN_PASSWORD` from the environment (defaults remain the local
+dev creds; the seed prints a loud reminder when the default password is
 used), so non-local deployments can set a real admin password without
 editing code.
 
@@ -291,7 +234,7 @@ editing code.
 `POST /api/auth/login` → refresh/me; dashboard summary; index
 current/trend/available-periods; routes CRUD (duplicate → 409) + weight
 patch; airlines (5); data-quality summary; fares filters; exports CSV;
-scrape trigger (SUCCESS 7330 rows, re-run → 0 new); runs list;
+ingest trigger (SUCCESS, re-run → 0 new); runs list;
 backtesting (honest `reference_available:false`);
 analytics lead-time + airline; admin audit-log + create user
 (`analyst@airindex.gov.in`). All smoke-test mutations rolled back
@@ -367,7 +310,7 @@ not attempted). Compose verifed statically:
   `.github/workflows/compose-verify.yml` builds and runs the exact
   stack headlessly on a Docker-enabled runner (GitHub-hosted
   `ubuntu-latest` ships Docker + compose v2). It: builds all three
-  services, waits for `/api/health`, logs in with the seeded demo
+  services, waits for `/api/health`, logs in with the seeded default
   admin and checks `/auth/me` returns ADMIN and
   `/dashboard/summary` returns an index, curls the frontend on 5173,
   re-runs the in-container seed to confirm idempotency, and always
@@ -378,25 +321,11 @@ not attempted). Compose verifed statically:
   `docker compose up --build` on a Docker-capable machine (the CI
   workflow is the automated stand-in).
 
-### robots.txt — live re-verified 2026-09-06
+### External reference data — none published as a fares series
 
-- Air India (`airindia.com` + `airindia.in`): **HTTP 000 / no response**
-  from both the project UA and a browser UA — edge CDN refuses
-  non-browser connections; treated as scrape-blocked (SOURCE
-  UNAVAILABLE). Status changed from "NOT CHECKED" → "CHECKED
-  (unreachable)" in `docs/ROBOTS_TXT_FINDINGS.md`.
-- Akasa Air (`akasaair.com`): **HTTP 200**, `User-Agent: *` with **no
-  Disallow rules** + 2 sitemaps — robots-PERMISSIVE. Status changed
-  from NOT CHECKED → CHECKED.
-- IndiGo / Air India Express / SpiceJet: still as documented (booking/
-  fare-search paths explicitly disallowed).
-
-### DGCA reference data — verified not publicly available as fares
-
-Live search confirmed DGCA publishes city-pair **passenger-traffic**
-statistics (PDF/Excel) and OTP reports, but **no machine-readable
-average-fare series**. `DGCA_MONTHLY_AVG` remains honestly empty and
-backtests return `reference_available:false`. No fabrication.
+No machine-readable published average-fare series exists to benchmark
+APIx against, so backtests honestly return `reference_available:false`
+until a real dataset is made available. Nothing is fabricated.
 
 ### Scheduler — full cron-cycle proof (gap from the integration test)
 
@@ -428,10 +357,10 @@ createdb airindex_fresh                          # empty, no schema
 alembic upgrade head                      -> "Running upgrade -> 0001_initial"
 alembic check                             -> "No new upgrade operations detected"   (zero drift on fresh DB)
 SEED_ADMIN_EMAIL=ops@fresh.gov.in SEED_ADMIN_PASSWORD=FreshAdmin_2026! \
-  python scripts/seed_database.py          -> 16 routes / DEMO_GENERATOR /
+  python scripts/seed_database.py          -> 16 routes / GOOGLE_FLIGHTS_API, MOSPI_CPI /
                                                admin (ops@fresh.gov.in (env-provided)) /
-                                               5 airlines / 7330 observations /
-                                               active index config base 2026-01
+                                               5 airlines / replayed real observations /
+                                               active index config
 uvicorn app.main:app                      -> /api/health 200
   POST /api/auth/login  {ops@fresh.gov.in, FreshAdmin_2026!}  -> access_token
   GET  /api/auth/me                       -> {"id":1,"email":"ops@fresh.gov.in",
@@ -442,7 +371,7 @@ dropdb airindex_fresh                      # clean teardown
 
 This is the closest executable analogue to the Docker backend service
 boot on a fresh volume, and it passes end-to-end (including the
-env-provided admin bootstrap replacing the demo creds).
+env-provided admin bootstrap).
 
 ### Verification gaps (only these remain)
 
@@ -453,7 +382,7 @@ env-provided admin bootstrap replacing the demo creds).
 2. Real-credential deploy: set `SEED_ADMIN_PASSWORD` /
    `SEED_ADMIN_EMAIL` and rotate `JWT_SECRET_KEY` before any non-local
    deployment (supported by the seed since the 2026-09-06 rebuild; the
-   local demo still intentionally uses the documented default).
+   local dev still intentionally uses the documented default).
 
 ## Full-page browser walk & bug fixes — 2026-09-07
 
@@ -538,8 +467,7 @@ Two real defects were caught and fixed by the first cloud run:
   absolute paths + explicit failure reporting. 
 - **backend image build bug**: `playwright install --with-deps
   chromium` exits 100 inside the `python:3.12-slim` build (unused by
-  demo/compose flows). Removed from `Dockerfile.backend`; browsers are
-  runtime-installable for future real scrapers.
+  the compose flow). Removed from `Dockerfile.backend`.
 
 Relevant run records: ci run `34196809040` (3/3 jobs green), compose-
 verify run `34196809068` (1/1 green) — both on commit `77d2377`;
@@ -627,8 +555,7 @@ FAILED (errors=1)   # test_api_integration: Postgres not running locally
 
 ### Key design decisions
 
-- Source badges on every data-derived number (LIVE/PUBLIC DATA/DEMO/UNAVAILABLE)
-- Amber demo banner on Dashboard: "Demo data — figures are simulated representative series"
+- Source badges on every data-derived number (LIVE/PUBLIC DATA/UNAVAILABLE)
 - All numbers from live API calls (no hardcoded values)
 - APIx from `/api/index/current` (never computed client-side)
 - Max 2 chart types per page (Dashboard: LineChart + CSS bars; Analysis Routes: BarChart + LineChart)

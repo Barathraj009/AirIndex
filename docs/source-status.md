@@ -1,46 +1,47 @@
-# Scraper Source Status (live findings, 2026-09)
+# Data Source Status (2026-09)
 
-Status mapping: `UNAVAILABLE` everywhere today — there is **no compliant
-live path** for any of the 11 sources. Each adapter exists, is registered,
-and re-checks robots.txt at runtime (fail-closed), but will honestly report
-`SOURCE_UNAVAILABLE` in the pipeline. The daily compliance job re-verifies
-these findings automatically.
+The product serves exactly **two real data sources**. Both are live and
+feed the combined airfare index.
 
-Airline findings are recorded in [ROBOTS_TXT_FINDINGS.md](ROBOTS_TXT_FINDINGS.md);
-OTA findings below were re-verified live during this build.
+| Source             | Source type    | Status | What it provides                                                          |
+|--------------------|----------------|--------|--------------------------------------------------------------------------|
+| `MOSPI_CPI`        | `PUBLIC_DATASET` | LIVE | Official MoSPI CPI airfare index, code 07.3.3.1 (domestic air transport), base 2024=100, published monthly. |
+| `GOOGLE_FLIGHTS_API`| `LIVE_SCRAPE`   | LIVE | Live Google Flights calendar fares per route via the licensed RapidAPI feed (`google-flights8.p.rapidapi.com`, Basic $0 plan). |
 
-| Source        | Category | Status       | Live finding (robots.txt / edge)                                | Fare-search path under scrutiny      |
-|---------------|----------|--------------|-----------------------------------------------------------------|--------------------------------------|
-| MakeMyTrip    | OTA      | UNAVAILABLE  | Disallows `/flight/search*`, `/flights/get-fare-calendar-block.html`, `/air/*` | `/flight/search`                     |
-| Yatra         | OTA      | UNAVAILABLE  | Disallows `/flights-india-vx/`, `/travel-beta/cheap-air-tickets`, app paths  | `/flights-india-vx/`                 |
-| EaseMyTrip    | OTA      | UNAVAILABLE  | Disallows `/flight-search/listing*` (the fare results path)       | `/flight-search/listing`             |
-| Cleartrip     | OTA      | UNAVAILABLE  | Disallows `/flights/search*`, `/flights/international/search`, `/api/` | `/flights/search`                    |
-| ixigo         | OTA      | UNAVAILABLE  | Disallows `/flights/search`, `/search/result/`, `/api/`, `/trains/v1/search/` | `/flights/search`                    |
-| Goibibo       | OTA      | UNAVAILABLE  | Disallows `/flights/*?*` (parameterised flight pages), `/flights/new/` | `/flights/search`                    |
-| IndiGo        | Airline  | UNAVAILABLE  | Disallows `/booking/*`, `/book/*`, `/search.html`, `/check-in/*`  | `/booking/bookingTypes`              |
-| Air India     | Airline  | UNAVAILABLE  | `airindia.com/robots.txt` edge-blocked (HTTP 000, bot and browser UA) | `/booking`                           |
-| AI Express    | Airline  | UNAVAILABLE  | Disallows `/flight-availability` (the results path), `/retro-claim` | `/flight-availability`               |
-| Akasa Air     | Airline  | UNAVAILABLE  | robots.txt permissive (HTTP 200, no Disallow) but the booking flow is an SPA over a private JSON API with CAPTCHA-grade protection | `/book-flight-tickets`               |
-| SpiceJet      | Airline  | UNAVAILABLE  | Disallows `/api/v1`, `/public/`, `/externalBooking` (the booking API) | `/api/v1`                            |
+## MOSPI_CPI — official airfare index
 
-## Why "adapter exists but UNAVAILABLE" is correct
+- Adapter: `ingestion/adapters/mospi_cpi.py`.
+- Fetch: `https://api.mospi.gov.in/api/cpi/getCPIData` (base year 2024,
+  All-India combined sector).
+- Target code: **07.3.3.1** ("Passenger transport by air, domestic").
+- Cadence: refreshed at startup and on the scheduled ingestion cron;
+  MoSPI publishes monthly around the 12th.
+- Stored in: `cpi_airfare_index` (period, `airfare_index`, YoY/MoM
+  inflation, transport/division indexes, provenance).
+- Failure: if MoSPI is unreachable, the last known series stays in the
+  table and the refresh is reported, never fabricated.
 
-The spec requires honest labeling and an actual compliant access method
-before a source is marked `LIVE`. Building an adapter that bypasses a
-disallow rule or anti-bot wall would violate robots.txt/ToS and the
-spec's compliance rules; therefore the framework ships the compliant
-scaffold (robots gate, canonical mapping, orchestrator hooks) with each
-source honestly `UNAVAILABLE`, plus a `DEMO_GENERATOR` fallback the
-dashboard uses until a partner/affiliate API is added.
+## GOOGLE_FLIGHTS_API — live fare feed
 
-## Path to LIVE (for each source)
+- Adapter: `ingestion/adapters/gds_adapter.py`.
+- API: RapidAPI provider `google-flights8`, host
+  `google-flights8.p.rapidapi.com`, `price-graph/one-way` endpoint.
+- One call per route returns the ~91-day calendar across all booking
+  windows; near-horizon sparse responses trigger a short-horizon
+  backfill.
+- Prices arrive in USD and are converted to INR at `FX_RATE_USD_INR`.
+- Requires `RAPIDAPI_KEY` in the environment; without it the feed stays
+  inert and the source reports `SOURCE_UNAVAILABLE` rather than
+  fabricating data.
+- Stored in: `fare_observations` (source `GOOGLE_FLIGHTS_API`,
+  source_type `LIVE_SCRAPE`).
+- Cadence: daily (≈180 requests/month on 6 routes at the default
+  `INGESTION_SCHEDULE_CRON`).
 
-| Source        | Compliant path that would flip this source to LIVE                    |
-|---------------|------------------------------------------------------------------------|
-| All OTAs      | An officially documented/partner fare API (e.g. affiliate feed, B2B JSON endpoint accessible under ToS). |
-| IndiGo / AI Express / SpiceJet / Akasa | A published schedule-and-fare feed or partner-agreement API. |
-| Air India     | A robots.txt reachable at the edge + public fare API, or partner feed. |
+## Unavailable-verdict behavior
 
-None of these exist as of 2026-09-13; when they do, only
-`_collect_compliant()` in `ingestion/scrapers/web_scrapers.py` needs to be
-implemented per source.
+When either source can't be reached, its adapter raises
+`SourceUnavailableError` and the corresponding ingestion run is recorded
+as `SOURCE_UNAVAILABLE` — the UI/API show **SOURCE UNAVAILABLE** rather
+than silently dropping or inventing data. See `docs/troubleshooting.md`
+for how to diagnose each source.

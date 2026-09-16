@@ -1,10 +1,11 @@
-# AirIndex India — SIH 2026, PS 26056
+# AirIndex India
 
 [![ci](https://img.shields.io/github/actions/workflow/status/Barathraj009/AirIndex/ci.yml?branch=main&label=ci)](https://github.com/Barathraj009/AirIndex/actions/workflows/ci.yml)
 [![compose-verify](https://img.shields.io/github/actions/workflow/status/Barathraj009/AirIndex/compose-verify.yml?branch=main&label=compose-verify)](https://github.com/Barathraj009/AirIndex/actions/workflows/compose-verify.yml)
 
-Real-time Airfare Price Index for India, built from automated fare
-collection across airline/OTA sources, for augmentation of the CPI.
+Real-time Airfare Price Index for India, backed by two real data
+sources: the official MoSPI CPI airfare index (code 07.3.3.1) and a
+licensed live Google Flights fare feed.
 
 ## Status — fully executed, verified locally (2026-09-06) and in cloud CI (2026-09-08)
 
@@ -24,14 +25,30 @@ real Docker) run:
   login → `/auth/me` → `/dashboard/summary`, curls the frontend, checks
   seed idempotency in-container. **Passing.**
 - **`ci`** — backend: `alembic upgrade head` + zero-drift `alembic
-  check` + the full 75-test suite against Postgres 16; frontend:
+  check` + the full test suite against Postgres 16; frontend:
   `npm ci` + `npm run typecheck` + production build; end-to-end:
-  real-Chromium login flow (8 checks) + full 13-route page walk against
+  real-Chromium login flow (8 checks) + full-route page walk against
   the production build + live backend. **Passing.**
 See `docs/VERIFICATION_LOG.md` for the full per-item record.
 
 ## What's built and verified
 
+- **Two real data sources** —
+  - **MOSPI_CPI** (`ingestion/adapters/mospi_cpi.py`) — the official
+    MoSPI CPI airfare index, code **07.3.3.1** ("Passenger transport by
+    air, domestic"), base **2024=100**, published monthly by the
+    Ministry of Statistics and Programme Implementation. Fetched live
+    from `api.mospi.gov.in` and stored in `cpi_airfare_index`. This is
+    the anchor series for the combined airfare index.
+  - **GOOGLE_FLIGHTS_API** (`ingestion/adapters/gds_adapter.py`) — live
+    Google Flights calendar fares via the licensed RapidAPI
+    `google-flights8.p.rapidapi.com` feed (Basic $0 plan). One
+    `price-graph/one-way` call per route returns the full ~91-day
+    calendar, covering every booking window in a single request;
+    near-horizon sparse responses trigger a short-horizon backfill.
+    Prices arrive in USD and are converted to INR at `FX_RATE_USD_INR`.
+    Observations flow through the same validation/index pipeline as the
+    MoSPI series.
 - **Index methodology** (`backend/app/services/index_engine.py`) — APIx
   v1.0.0, a configuration-driven modified-Laspeyres route-weighted
   index, with booking-window weights, route/airline contribution
@@ -41,17 +58,15 @@ See `docs/VERIFICATION_LOG.md` for the full per-item record.
 - **Data pipeline** (`backend/app/services/data_processing.py`) — IQR +
   MAD outlier detection, structural validation, data-quality status
   classification (VALID / SUSPICIOUS / INVALID / UNAVAILABLE).
-- **Live real-time fare feed** (`ingestion/adapters/gds_adapter.py`) — real
-  Google Flights calendar fares via the licensed RapidAPI
-  `google-flights8.p.rapidapi.com` feed (Basic $0 plan). One
-  `price-graph/one-way` call per route returns the full ~91-day calendar,
-  covering every booking window in a single request; near-horizon sparse
-  responses trigger a short-horizon backfill. Prices arrive in USD and are
-  converted to INR at `FX_RATE_USD_INR`. Collected observations are labeled
-  `source=GOOGLE_FLIGHTS_API`, `source_type=LIVE_SCRAPE`, and flow through
-  the same validation/index pipeline as every other source. Verified live
-  end-to-end (2026-09): 30 real observations across the 6 active routes,
-  feeding the computed APIx index.
+- **Combined CPI airfare series** (`backend/app/services/cpi_engine.py`) —
+  Merges the live fare feed into the official CPI airfare index,
+  producing a single combined airfare series, headline inflation delta
+  (bps), volatility capture, and reporting-lag analysis relative to the
+  official monthly publication cycle.
+- **Route basket** (`backend/app/services/route_basket.py`) — 16
+  domestic city-pair routes covering the trunk and regional markets,
+  with weights proportional to approximate all-India domestic
+  passenger-traffic share. Admin-overridable via the routes table/API.
 - **Backtesting** (`backend/app/services/backtesting.py`) — MAE/RMSE/
   MAPE/correlation metrics; honestly returns `reference_available:false`
   rather than fabricating comparisons when no reference data exists.
@@ -64,37 +79,30 @@ See `docs/VERIFICATION_LOG.md` for the full per-item record.
   (`alembic check` = no new upgrade operations). Applied to the real DB
   and idempotently seeded.
 - **API** — FastAPI routers for auth, dashboard, index, routes/airlines,
-  fares/data-quality, ingestion (scrape trigger + run monitor),
-  backtesting, analytics, exports, admin/audit. In-memory rate limiter
+  fares/data-quality, ingestion (trigger + run monitor), cpi, backtesting,
+  analytics, exports, admin/audit. In-memory rate limiter
   (120 req/min, verified 429 + `Retry-After`), APScheduler cron job
   (daily 06:00 UTC by default — see `INGESTION_SCHEDULE_CRON`, disabled
   under `ENVIRONMENT=test`), CORS, global error
   handler, `/api/health`.
-- **MoSPI CPI Augmentation Simulator** (`backend/app/services/cpi_engine.py`) —
-  Models real-time integration of APIx into official Consumer Price Index (Base
-  2012=100) Transport group (~8.59% weight) and airfare subcomponent
-  (~0.20% weight), computing headline inflation delta (bps), volatility
-  capture, and ~45 days reporting lag reduction.
-- **DGCA Traffic Calibration & Benchmarks** (`backend/app/services/dgca_service.py`) —
-  Route basket weights calibrated with official DGCA annual domestic city-pair
-  passenger traffic volume. 1-click admin auto-calibration and benchmark
-  reference datasets for backtesting.
 - **3D Visualization** (`frontend/src/pages/Analysis.tsx`) — Index trend,
   YoY/MoM inflation, seasonality, forecast bands, route basket, and
-  airfare-vs-ATF analysis with 2D, isometric, and WebGL 3D chart modes.
+  booking-window analysis with 2D, isometric, and WebGL 3D chart modes.
 - **Surge Anomaly Detection & Forecasting** (`backend/app/services/anomaly_detector.py`,
   `backend/app/services/forecaster.py`) — Route price gouging / surge spike alerts
   and 1–3 month time-series forward index projections with 80% & 95% confidence bands.
 - **Full Admin Console** (`frontend/src/pages/Admin.tsx`) — dedicated tabs:
-  Route Weights (with DGCA auto-calibration), User Management (roles & status
-  toggling), and Index Configuration.
+  Route Weights, User Management (roles & status toggling), and Index Configuration.
 - **Official Monthly Statistical Bulletin** (`backend/app/api/routers/bulletin.py`) —
-  Automated MoSPI/DGCA executive summary export (`/api/exports/monthly-bulletin`).
+  Automated MoSPI executive summary export (`/api/exports/monthly-bulletin`).
 - **Frontend** — React + TypeScript + Vite + Tailwind + Recharts + ECharts GL.
   Core pages (Login, Dashboard, Analysis, Data, Admin) with full navigation,
   typed API client, Change Password modal, and auth guards.
-- **Seed** (`scripts/seed_database.py`) — idempotent: 16 routes, 7330 fare observations,
-  multi-role accounts (ADMIN, ANALYST, VIEWER), all data sources, DGCA benchmark data.
+- **Seed** (`scripts/seed_database.py`) — idempotent: the 16-route basket, the
+  two real data-source rows, replayed real observations from both sources
+  (`backend/app/services/replay_data.py`), multi-role accounts
+  (ADMIN, ANALYST, VIEWER), and an active index configuration. No
+  synthetic data is loaded.
 - **Report Generation** (`backend/app/services/reports.py`) — PDF executive reports
   (reportlab) and Excel workbooks (openpyxl) from IndexResult. Available via
   `GET /api/reports/export?formats=pdf,excel` with auth.
@@ -106,7 +114,7 @@ See `docs/VERIFICATION_LOG.md` for the full per-item record.
 ## Test suite — all passing
 
 ```
-PYTHONPATH=".;./backend"  python -m unittest discover -s tests        # 90 tests: OK
+PYTHONPATH=".;./backend"  python -m unittest discover -s tests        # full suite: OK
 PYTHONPATH=".;./backend"  python -m unittest tests.test_api_integration -v
 ```
 
@@ -116,10 +124,10 @@ Windows/PowerShell:
 $env:PYTHONPATH=".;./backend"; python -m unittest discover -s tests -q
 ```
 
-70 unit tests cover the analytical core, security, DB schema, rate
-limiter, and scheduler wiring. 20 integration tests hit the **real
-HTTP API** (`FastAPI.testclient`) against a dedicated
-`airindex_test` database — every test forces
+Unit tests cover the analytical core, security, DB schema, rate
+limiter, and scheduler wiring. Integration tests hit the **real HTTP
+API** (`FastAPI.testclient`) against a dedicated `airindex_test`
+database — every integration test forces
 `DATABASE_URL=airindex_test` + `ENVIRONMENT=test` before app imports and
 refuses to run against any other DB, then wipes + reseeds per test. The
 suite does not touch the dev database.
@@ -137,7 +145,7 @@ npm --prefix frontend install
 copy .env.example .env        # then fill in DATABASE_URL, JWT secret, and
                               # RAPIDAPI_KEY for the live Google Flights feed
 
-# 2. create db + user (once) per VERIFICATION_LOG, then migrate + seed
+# 2. create db + user (once), then migrate + seed
 cd backend; ..\.venv\Scripts\alembic.exe upgrade head; ..\.venv\Scripts\python.exe ..\scripts\seed_database.py
 
 # 3. backend API
@@ -156,6 +164,10 @@ point the build at the backend once and serve it:
 cd frontend; $env:VITE_API_BASE_URL="http://127.0.0.1:8000/api"; npm run build
 npm run preview -- --port 4173     # then open http://localhost:4173/ (backend CORS covers this origin)
 ```
+
+The MoSPI CPI airfare index is refreshed at server startup and on the
+scheduled cadence (see `INGESTION_SCHEDULE_CRON`); the Google Flights
+feed collects live fares per active route when `RAPIDAPI_KEY` is set.
 
 ## Docker (statically verified; automated runtime verification included)
 
@@ -196,12 +208,13 @@ frontend, and a free Postgres database. Blueprint deploy:
 | `FX_RATE_USD_INR` | 90.0 default; USD→INR reference rate for the feed |
 
 The backend image waits for Postgres, `create_all`s the schema, runs
-`bootstrap_reference.py` (routes, data sources incl. `GOOGLE_FLIGHTS_API`,
-admin user, active index config — **no** synthetic observations), then
-serves on :8000. Set `SEED_ADMIN_PASSWORD` to a strong value or the
-bootstrap aborts.
+`bootstrap_reference.py` (route basket, the two data sources
+`MOSPI_CPI` + `GOOGLE_FLIGHTS_API`, admin user, active index config —
+**no** synthetic observations), then serves on :8000. The MoSPI CPI
+table is populated at startup from `api.mospi.gov.in`. Set
+`SEED_ADMIN_PASSWORD` to a strong value or the bootstrap aborts.
 
-## Auth — demo credentials
+## Auth — default credentials
 
 | Role | Email | Password |
 |---|---|---|
@@ -212,49 +225,36 @@ the JWT secret in `.env` and change the admin password before any
 non-local deployment** (seed prints a loud reminder on every run).
 Deployments can set a real admin upfront via `SEED_ADMIN_EMAIL` /
 `SEED_ADMIN_PASSWORD` env vars (see `.env.example`) instead of using
-the demo creds. A second user (`analyst@airindex.gov.in`, ADMIN-created)
+the defaults. A second user (`analyst@airindex.gov.in`, ADMIN-created)
 is also in the audit log.
 
 ## Data source labeling — honesty constraints
 
 Every observation and index calculation carries a `source_type`:
-`LIVE_SCRAPE`, `PUBLIC_DATASET`, or `DEMO_SIMULATED`. When a source
-can't be reached the adapter raises `SourceUnavailableError` and the UI/
-API shows **SOURCE UNAVAILABLE** rather than silently dropping or
-fabricating data. Simulated data is never presented as live. Auto-ingest
-adapters are robots.txt-driven, rate-limited, and never bypass CAPTCHA
-or login walls.
+`LIVE_SCRAPE` (Google Flights live feed) or `PUBLIC_DATASET` (MoSPI).
+When a source can't be reached the adapter raises `SourceUnavailableError`
+and the UI/API shows **SOURCE UNAVAILABLE** rather than silently dropping
+or fabricating data.
 
 ### Licensed live feed (Google Flights via RapidAPI)
 
-The only real-time fare source is a **licensed API feed** — the Google
+The real-time fare source is a **licensed API feed** — the Google
 Flights calendar prices endpoint (RapidAPI provider `google-flights8`,
-host `google-flights8.p.rapidapi.com`). It is on the per-route
-`booking_window_weights`/route basket like any other source, but because
-it is a licensed API (not a crawled website) it is exempt from the
-robots.txt compliance gate and appears separately in the Dashboard as a
-**Live feed** pill next to the 11 web scrapers. Enable it in any
-environment with `RAPIDAPI_KEY` in `.env` (feed source row is seeded by
-`bootstrap_reference.py` in production and `seed_database.py` for the
-demo DB). Daily cadence ≈ 180 RapidAPI requests/month on 6 routes.
+host `google-flights8.p.rapidapi.com`). It sits on the same
+`booking_window_weights`/route basket as the MoSPI series and appears
+separately in the Dashboard as a **Live feed** pill. Enable it in any
+environment with `RAPIDAPI_KEY` in `.env` (the feed source row is
+seeded by `bootstrap_reference.py` in production and
+`seed_database.py` for local dev). Daily cadence ≈ 180 RapidAPI
+requests/month on 6 routes.
 
-### robots.txt reality (checked live, see `docs/ROBOTS_TXT_FINDINGS.md`)
+### Official MoSPI index (07.3.3.1)
 
-IndiGo, Air India Express, and SpiceJet **explicitly disallow** the
-booking/fare-search paths a scraper would need. Akasa Air is
-robots-permissive (no Disallow rules). Air India's edge CDN refuses even
-the robots.txt fetch (HTTP 000). The system therefore runs the robust
-`DemoAdapter` + `SOURCE_UNAVAILABLE` path; real airline fare collection
-should go through official OTA partner/affiliate APIs or public
-datasets, not airline-site scraping.
-
-### DGCA reference data for backtesting
-
-DGCA publishes city-pair passenger *traffic* statistics and OTP
-reports, but **no machine-readable average-fare series**. The
-`DGCA_MONTHLY_AVG` reference source is therefore honestly empty and the
-backtester returns `reference_available:false` until a real dataset is
-made available — nothing is fabricated to paper over it.
+The MoSPI CPI airfare index (code **07.3.3.1**, base **2024=100**) is
+the official domestic airfare price series for India, published
+monthly by MoSPI. The platform fetches it live from
+`api.mospi.gov.in` into `cpi_airfare_index` and anchors the combined
+APIx series to it.
 
 ## Methodology summary (APIx v1.0.0)
 
@@ -269,7 +269,9 @@ math and rationale: `backend/app/services/index_engine.py` docstring and
 
 - `docs/VERIFICATION_LOG.md` — per-item build/verification record.
 - `docs/METHODOLOGY.md` — index math, weights, real reference data point.
-- `docs/ROBOTS_TXT_FINDINGS.md` — live robots.txt findings per airline.
+- `docs/data-schema.md` — live schema (CPI, fares, ingestion, index runs).
+- `docs/source-status.md` — status of the two real data sources.
+- `docs/troubleshooting.md` — common issues and fixes.
 - `deployment/` — `docker-compose.yml`, both Dockerfiles,
   `schema_postgres.sql` (superseded reference; use Alembic).
 

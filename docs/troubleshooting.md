@@ -1,64 +1,63 @@
-# Scraping Troubleshooting
+# Troubleshooting
 
-Common symptoms and fixes for the web-scraping framework.
+Common symptoms and fixes for the two-source product (MoSPI CPI +
+Google Flights feed).
 
-## Every source reports UNAVAILABLE — is something broken?
+## Google Flights feed reports SOURCE UNAVAILABLE
 
-No. That is the intended, honest state. As of 2026-09-13 none of the 11
-sources has a compliant live path (robots.txt disallows the fare-search
-paths). See [source-status.md](source-status.md) and
-[compliance.md](compliance.md).
+- **Missing `RAPIDAPI_KEY`.** Without the key the `GOOGLE_FLIGHTS_API`
+  adapter stays inert and raises `SourceUnavailableError`. Set
+  `RAPIDAPI_KEY` in `.env` (RapidAPI, provider `google-flights8`,
+  host `google-flights8.p.rapidapi.com`) and restart the backend.
+- **Invalid/expired key, or quota exhausted.** The Basic $0 plan is
+  rate-limited. Check the source's `last_failure_reason` on the
+  `data_sources` row and the `ingestion_runs` rows; a `401/403` means
+  the key, an HTTP 429 means quota.
+- **No network egress.** The backend host must be able to reach
+  `google-flights8.p.rapidapi.com` over HTTPS.
 
-To confirm the reason a specific source is down, call the Scraper Monitor:
+## MoSPI CPI refresh failures
 
-```bash
-curl -H "Authorization: Bearer $TOKEN" /api/scrapers/status
-# add ?force_robots_check=1 to trigger a live robots.txt re-fetch
-```
+- **MoSPI API unreachable / TLS issue.** `api.mospi.gov.in` uses legacy
+  TLS renegotiation; `ingestion/adapters/mospi_cpi.py` handles this via
+  `SSL_OP_LEGACY_SERVER_CONNECT`. If it still fails, it's usually a
+  transient outage or egress restriction.
+- **No new months.** MoSPI publishes around the 12th of each month; the
+  table keeps the last known series, so a refresh that returns nothing
+  new is expected mid-month. `populate_cpi.py` inserts with
+  `ON CONFLICT DO NOTHING` on `period`, so re-runs are idempotent.
+- **Diagnose a run.** `GET /api/ingestion/runs` (with auth) shows the
+  last run per source, its status, and `error_message` for the failure.
 
-`last_failure_reason` and `scraper_errors` rows explain the verdict.
+## The index changed after a refresh — is that expected?
 
-## The daily compliance job doesn't seem to run
+Yes. The combined CPI airfare series anchors on the official MoSPI
+index and is blended with live Google Flights fares, so a month where
+MoSPI republishes or where live fares shift will move APIx. Per-run
+`calculation_breakdown` in `index_runs` explains exactly which routes
+and windows drove the change.
 
-- It runs from `run_scraper_compliance_check` on the APScheduler at
-  06:30 UTC. In production it runs inside the web process lifespan, so a
-  restart is enough to pick up new scheduler jobs.
-- If the environment is `test`, the scheduler is disabled by design.
-- Check `REFRESH_OUTCOMES["scraper_compliance"]` via the existing refresh
-  diagnostics endpoints to see the last run and error.
+## SQLite vs Postgres
 
-## A source's robots.txt appears to have changed but the monitor still
-## shows the old verdict
+- The app is designed for **PostgreSQL 16**. Local unit-test runs of
+  individual modules can use sqlite for offline schema checks
+  (`tests/sqlite_schema.py`), but the integration suite requires
+  Postgres: `tests/test_api_integration.py` forces
+  `DATABASE_URL=airindex_test` and fails at `setUpClass` without a
+  running Postgres server — not a regression.
+- **Float/NaN:** Postgres stores `float8` NaN which the JSON encoder
+  rejects. The write layer sanitizes non-finite floats to NULL
+  (`backend/app/core/json_safe.py`); sqlite does not reproduce this
+  surface, so verify against Postgres.
+- **`alembic check` reports drift.** Run `alembic upgrade head` first;
+  the baseline plus `0008` must be applied to match the models. On a
+  fresh DB, `alembic check` returns "No new upgrade operations detected".
 
-The in-process cache is valid for one hour, and `/api/scrapers` does not
-hit the network. Use `GET /api/scrapers/status?force_robots_check=1` for a
-live (cache-bypassing) verdict.
+## Salt / credentials
 
-## Adapter raises `SourceUnavailableError` even with `force_robots_check`
-
-This is correct behavior when the bots rule disallows the path. If you
-have evidence a source now permits crawling **and** you have a compliant
-path to implement, update the `ScraperSpec` status to `LIVE` and implement
-`_collect_compliant()` — never weaken the robots gate instead.
-
-## `alembic check` reports drift on the new tables
-
-Run `alembic upgrade head` first. The index names on `scraper_errors` /
-`fare_searches` must match SQLAlchemy's default convention
-(`ix_<table>_<column>` = `ix_scraper_errors_source_name` and
-`ix_fare_searches_source_name`); the migration 0007 uses exactly those.
-
-## The frontend Scraper Monitor is empty
-
-- `GET /api/scrapers` requires the `view_scraping_monitor` permission;
-  without a token you'll get 401.
-- `/api/scrapers/runs` filters to rows whose `data_source_id` maps to one
-  of the 11 source names. Until a run happens the "Recent Scraper Runs"
-  card shows the empty state.
-- Run `scripts/seed_database.py` if the 11 source rows are missing.
-
-## Postgres-dependent integration tests fail locally
-
-`tests/test_api_integration.py` connects to Postgres at boot
-(`airindex_test`, forcibly set). Without a local Postgres, this single
-suite errors at setUpClass — not a regression. It runs in CI.
+- `RAPIDAPI_KEY` and the JWT secret are read from the environment; never
+  commit a real `.env`. Missing `JWT_SECRET_KEY` or the placeholder value
+  blocks the app in `ENVIRONMENT=production`.
+- Reset the seeded admin password (default `change-me-immediately`) via
+  `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` before any non-local deploy;
+  production refuses the default.

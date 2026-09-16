@@ -1,53 +1,40 @@
-"""API integration tests — full request stack (FastAPI TestClient →
-routers → services) against the real Postgres schema, executed via the
-Alembic migration against the isolated `airindex_test` database.
+"""API integration tests - full request stack (FastAPI TestClient → routers →
+services) against a real SQLite database seeded from the bundled replay CSVs
+and the canonical route basket (no network, no Postgres required).
 
-These run automatically with:
+These run with:
     PYTHONPATH=.;./backend python -m unittest discover -s tests -v
 
-They never touch the development `airindex` database: this module forces
-DATABASE_URL to AIRINDEX_TEST_DB_URL and refuses to run against it.
+The two real product sources are seeded: GOOGLE_FLIGHTS_API (30 fare
+observations replayed from app/data/google_flights_replay.csv, periods
+2026-09/2026-10, airline MULTI) and MOSPI_CPI (32 months of official CPI
+airfare 07.3.3.1 from app/data/mospi_cpi_replay.csv, 2024=100 base).
 """
 
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-AIRINDEX_TEST_DB_URL = (
-    "postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex_test"
-)
-
-# Must be set before any app import so get_settings() (lru_cached at first
-# import) binds the engine/session to the test database, and so the
-# scheduler stays disabled (environment=test).
-os.environ["DATABASE_URL"] = AIRINDEX_TEST_DB_URL
+# Bind the app to a scratch SQLite database before any app import so
+# get_settings() (lru_cached at first import) and the engine resolve to it.
+_TMP_DB = tempfile.mktemp(suffix="_airindex_test.db")
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB.replace(os.sep, '/')}"
 os.environ["ENVIRONMENT"] = "test"
 os.environ["JWT_SECRET_KEY"] = "integration-test-secret-not-for-production"
 
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT))
 
-from sqlalchemy import create_engine, text  # noqa: E402
-
-_reach_engine = create_engine(
-    "postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex_test",
-    connect_args={"connect_timeout": 2},
-)
-try:
-    with _reach_engine.connect() as c:
-        c.execute(text("SELECT 1"))
-    POSTGRES_AVAILABLE = True
-except Exception:
-    POSTGRES_AVAILABLE = False
-del _reach_engine
-
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core.database import engine, SessionLocal  # noqa: E402
 from app.models import Base  # noqa: E402
+from app.models.cpi import CpiAirfareIndex  # noqa: E402
+from app.models.backtesting import ReferenceDataPoint  # noqa: E402
 from app.main import app  # noqa: E402
 
 client = TestClient(app)
@@ -57,41 +44,71 @@ def _wipe_all_tables():
     db = SessionLocal()
     try:
         meta = Base.metadata
-        # Drop children first: simplest reliable order is drop-all/recreate
-        # on the test schema — fast enough for integration tests.
         meta.drop_all(bind=engine)
         meta.create_all(bind=engine)
     finally:
         db.close()
 
 
-@unittest.skipUnless(
-    POSTGRES_AVAILABLE,
-    "airindex_test PostgreSQL (localhost:5432) is not reachable; "
-    "the live-Postgres API integration suite is skipped. Start the "
-    "Postgres test instance (e.g. `docker compose up -d test-db`) "
-    "to run it. Only the two live sources' request stack is covered "
-    "here; the replay/combined offline suite always runs.",
-)
+def _seed_real_data():
+    """Seed routes + two sources + users + replay observations + CPI history
+    + reference data, all from the bundled replay CSVs / canonical basket."""
+    from scripts.seed_database import seed
+
+    seed()
+
+    db = SessionLocal()
+    try:
+        # Official MoSPI CPI airfare history (32 months, 2024=100).
+        from app.services.replay_data import mospi_cpi_replay
+
+        if db.query(CpiAirfareIndex).count() == 0:
+            from datetime import date, datetime, timezone
+            for r in mospi_cpi_replay():
+                db.add(CpiAirfareIndex(
+                    period=r["period"],
+                    data_date=date.fromisoformat(r["period"] + "-15"),
+                    airfare_index=float(r["airfare_index"]),
+                    transport_index=float(r["transport_index"]) if r.get("transport_index") else None,
+                    general_index=float(r["general_index"]) if r.get("general_index") else None,
+                    inflation_yoy=float(r["inflation_yoy"]) if r.get("inflation_yoy") else None,
+                    source=r.get("source", "MOSPI_CPI"),
+                    source_url=r.get("source_url"),
+                    cpi_code=r.get("cpi_code", "07.3.3.1"),
+                    base_year=r.get("base_year", "2024=100"),
+                    fetched_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(timezone.utc),
+                ))
+            db.commit()
+            print(f"Seeded {db.query(CpiAirfareIndex).count()} CPI airfare index rows.")
+
+        # Reference dataset the backtesting suite compares APIx against.
+        if db.query(ReferenceDataPoint).count() == 0:
+            last = (db.query(CpiAirfareIndex)
+                    .order_by(CpiAirfareIndex.period.desc()).all())
+            vals = {r.period: r.airfare_index for r in last[-2:]}
+            for period in ("2026-09", "2026-10"):
+                db.add(ReferenceDataPoint(
+                    dataset_name="CPI_REFERENCE",
+                    period=period,
+                    value=vals.get(period, 135.0),
+                    label="ALL_INDIA_AVG",
+                ))
+            db.commit()
+            print(f"Seeded {db.query(ReferenceDataPoint).count()} reference data points.")
+    finally:
+        db.close()
+
+
 class APIIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if "airindex_test" not in engine.url.database:
-            raise RuntimeError(
-                "Refusing to seed integration data into non-test database "
-                f"{engine.url.database!r}"
-            )
         _wipe_all_tables()
-        from scripts.seed_database import seed
-
-        seed()
+        _seed_real_data()
 
     def setUp(self):
-        # Deterministic baseline: wipe + reseed before every test.
         _wipe_all_tables()
-        from scripts.seed_database import seed
-
-        seed()
+        _seed_real_data()
 
     def _login(self, email="admin@airindex.gov.in", password="change-me-immediately"):
         r = client.post("/api/auth/login", json={"email": email, "password": password})
@@ -140,25 +157,26 @@ class APIIntegrationTests(unittest.TestCase):
         r = client.get("/api/index/current", headers=self._auth(token))
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
-        self.assertEqual(body["base_period"], "2026-01")
-        # Base period index must be exactly 100.0
-        r_base = client.get("/api/index/current?as_of_period=2026-01", headers=self._auth(token))
+        self.assertEqual(body["base_period"], "2026-09")
+        # Base period index must be exactly 100.0 (replay calendar window).
+        r_base = client.get("/api/index/current?as_of_period=2026-09", headers=self._auth(token))
+        self.assertEqual(r_base.status_code, 200, r_base.text)
         self.assertEqual(r_base.json()["index_value"], 100.0)
 
     def test_index_trend_series(self):
         token = self._login()["access_token"]
-        r = client.get("/api/index/trend?periods=2026-01,2026-04", headers=self._auth(token))
+        r = client.get("/api/index/trend?periods=2026-09,2026-10", headers=self._auth(token))
         self.assertEqual(r.status_code, 200, r.text)
         series = r.json()["series"]
         self.assertEqual(len(series), 2)
-        self.assertEqual(series[0]["period"], "2026-01")
+        self.assertEqual(series[0]["period"], "2026-09")
         self.assertEqual(series[0]["index_value"], 100.0)
 
     def test_available_periods(self):
         token = self._login()["access_token"]
         r = client.get("/api/index/available-periods", headers=self._auth(token))
         self.assertEqual(r.status_code, 200)
-        self.assertIn("2026-01", r.json()["periods"])
+        self.assertIn("2026-09", r.json()["periods"])
 
     # ---- reference / routes ----
 
@@ -188,7 +206,7 @@ class APIIntegrationTests(unittest.TestCase):
         r = client.get("/api/airlines", headers=self._auth(token))
         self.assertEqual(r.status_code, 200)
         names = {a["name"] for a in r.json()}
-        self.assertIn("IndiGo", names)
+        self.assertIn("MULTI", names)
 
     # ---- data quality / fares ----
 
@@ -200,7 +218,7 @@ class APIIntegrationTests(unittest.TestCase):
         for key in ("total_rows", "valid", "suspicious", "invalid", "unavailable",
                     "valid_pct", "issues_sample"):
             self.assertIn(key, body)
-        self.assertEqual(body["total_rows"], 7330)
+        self.assertEqual(body["total_rows"], 30)
 
     def test_fares_filters(self):
         token = self._login()["access_token"]
@@ -212,22 +230,26 @@ class APIIntegrationTests(unittest.TestCase):
             self.assertEqual(rows[0]["origin"], "DEL")
             self.assertEqual(rows[0]["destination"], "BOM")
 
-    # ---- scraping / ingestion ----
+    # ---- sources (two-source monitor, replaces scrapers monitor) ----
 
-    def test_scraping_trigger_and_runs(self):
+    def test_sources_lists_the_two_real_sources(self):
         token = self._login()["access_token"]
-        r = client.post("/api/scraping/trigger", headers=self._auth(token), json={"source_names": ["DEMO_GENERATOR"]})
+        r = client.get("/api/sources", headers=self._auth(token))
         self.assertEqual(r.status_code, 200, r.text)
-        runs = r.json()["runs"]
-        self.assertEqual(runs[0]["status"], "SUCCESS")
-        # deterministic demo data -> re-run inserts nothing new
-        r2 = client.post("/api/scraping/trigger", headers=self._auth(token), json={"source_names": ["DEMO_GENERATOR"]})
-        self.assertEqual(r2.json()["runs"][0]["rows_collected"], 0)
+        body = r.json()
+        names = {s["source_name"] for s in body["sources"]}
+        self.assertEqual(names, {"GOOGLE_FLIGHTS_API", "MOSPI_CPI"})
+
+    def test_sources_runs_is_a_list(self):
+        token = self._login()["access_token"]
+        r = client.get("/api/sources/runs?limit=10", headers=self._auth(token))
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIsInstance(r.json(), list)
 
     # ---- backtesting ----
 
     def test_backtesting_reports_source_unavailable_honestly(self):
-        """Period far outside any seeded reference data must report
+        """Period far outside any reference data must report
         SOURCE UNAVAILABLE rather than fabricating comparison figures."""
         token = self._login()["access_token"]
         r = client.post("/api/backtesting/run", headers=self._auth(token),
@@ -237,12 +259,13 @@ class APIIntegrationTests(unittest.TestCase):
         self.assertFalse(body["reference_available"])
         self.assertIn("SOURCE UNAVAILABLE", body["note"])
 
-    def test_backtesting_reports_seeded_reference(self):
-        """Within the seeded DGCA reference window the comparison must
-        come back available with metrics and aligned points."""
+    def test_backtesting_uses_seeded_reference(self):
+        """Within the seeded CPI_REFERENCE window the comparison must come
+        back available with aligned points."""
         token = self._login()["access_token"]
         r = client.post("/api/backtesting/run", headers=self._auth(token),
-                        json={"start_period": "2026-02", "end_period": "2026-08"})
+                        json={"start_period": "2026-09", "end_period": "2026-10",
+                              "reference_dataset": "CPI_REFERENCE"})
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
         self.assertTrue(body["reference_available"])
@@ -278,7 +301,6 @@ class RateLimitMiddlewareTests(unittest.TestCase):
 
         inner = Starlette()
         app = RateLimitMiddleware(inner, limit_per_minute=2)
-        # mount one route to have a real endpoint
         inner.add_route("/x", lambda request: JSONResponse({"ok": True}))
         with TC(app) as c:
             self.assertEqual(c.get("/x").status_code, 200)

@@ -1,67 +1,46 @@
 import { Area, AreaChart, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts'
-import { Plane, TrendingUp, CalendarDays, Wifi } from 'lucide-react'
+import { Plane, TrendingUp, CalendarDays } from 'lucide-react'
 import { useRef } from 'react'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, StatCard, Card, LoadingState, ErrorState, EmptyState, TrendPill } from '../components/ui'
 import { exportChartAsPNG, downloadCSV } from '../utils/exportChart'
-import type { CpiAirfareIndex, CpiAirfareTrend, ScraperStatusSummary } from '../types'
+import type { CpiAirfareIndex, CpiAirfareTrend, SourceStatusItem } from '../types'
 
-function ScraperStatusStrip() {
-  const status = useApiQuery<ScraperStatusSummary>('/scrapers')
+function SourceStatusStrip() {
+  const sources = useApiQuery<SourceStatusItem[]>('/api/sources')
 
-  if (status.loading || status.error) return null
-  if (!status.data) return null
+  if (sources.loading || sources.error || !sources.data) return null
 
-  const sources = status.data.sources
-  const byStatus: Record<string, ScraperStatusSummary['sources']> = { LIVE: [], DEMO: [], MOCK: [], UNAVAILABLE: [] }
-  sources.forEach((s) => { (byStatus[s.status] ??= []).push(s) })
-  const shortLabels: Record<string, string> = {
-    MAKEMYTRIP_WEB: 'MakeMyTrip', YATRA_WEB: 'Yatra', EASEMYTRIP_WEB: 'EaseMyTrip',
-    CLEARTRIP_WEB: 'Cleartrip', IXIGO_WEB: 'ixigo', GOIBIBO_WEB: 'Goibibo',
-    INDIGO_WEB: 'IndiGo', AIR_INDIA_WEB: 'Air India', AIR_INDIA_EXPRESS_WEB: 'AI Express',
-    AKASA_WEB: 'Akasa', SPICEJET_WEB: 'SpiceJet',
-    GOOGLE_FLIGHTS_API: 'Google Flights',
-  }
-
-  const pill = (s: { source_name: string; status: string; label: string }) => {
-    const liveCls =
-      s.status === 'LIVE' ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
-      : s.status === 'DEMO' ? 'bg-amber-500/10 text-amber-700 border-amber-500/30'
-      : s.status === 'MOCK' ? 'bg-slate-500/10 text-slate-500 border-line'
-      : 'bg-rose-500/5 text-rose-600 border-line'
-    return (
-      <span key={s.source_name} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${liveCls}`}>
-        <span className="h-1.5 w-1.5 rounded-full bg-current" />
-        {shortLabels[s.source_name] ?? s.label}
-      </span>
-    )
-  }
+  const pills = [
+    { name: 'MOSPI_CPI', label: 'MoSPI CPI (07.3.3.1)' },
+    { name: 'GOOGLE_FLIGHTS_API', label: 'Google Flights' },
+  ]
 
   return (
     <Card
-      title="Live Fare Scraper Status"
+      title="Data Sources"
       action={
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
-          <Wifi size={12} />
-          {sources.length} sources · updated {new Date(status.data.as_of).toLocaleTimeString()}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {pills.map((p) => {
+            const active = !!sources.data!.find((s) => s.name === p.name)?.active
+            return (
+              <span
+                key={p.name}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                  active ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30' : 'bg-slate-500/10 text-slate-500 border-line'
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                {p.label}
+              </span>
+            )
+          })}
+        </div>
       }
     >
-      <p className="pb-3 text-xs text-muted">
-        Licensed Google Flights feed (RapidAPI) plus compliance status of the airline and OTA
-        scrapers. UNAVAILABLE = no compliant live path (robots.txt / Terms); never scraped around.
+      <p className="pb-1 text-xs text-muted">
+        Live fares from Google Flights and the official MoSPI CPI airfare index (07.3.3.1, base 2024=100).
       </p>
-      <p className="pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">Live feed</p>
-      <div className="flex flex-wrap gap-2">
-        {(status.data.live_feeds ?? []).map(pill)}
-      </div>
-      <p className="pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted">Web scrapers</p>
-      <div className="flex flex-wrap gap-2">
-        {byStatus.LIVE.map(pill)}
-        {byStatus.DEMO.map(pill)}
-        {byStatus.MOCK.map(pill)}
-        {byStatus.UNAVAILABLE.map(pill)}
-      </div>
     </Card>
   )
 }
@@ -159,8 +138,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Scraper availability strip */}
-      <ScraperStatusStrip />
+      <SourceStatusStrip />
 
       {/* Trend chart */}
       {trendData.length > 0 && (

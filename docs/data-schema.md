@@ -1,58 +1,93 @@
-# Scraper Data Schema
+# Data Schema
 
-The scraping framework deliberately reuses the existing, already-tested
-schema wherever possible, so no core tables change.
+The live schema is defined by the SQLAlchemy models in
+`backend/app/models/` and applied via Alembic migrations (`0001` …
+`0008`). Migration `0008` dropped the scraper/demo/WPI-ATF/DGCA tables;
+the tables below are the ones the two-source product reads and writes.
 
-## Mapping (spec table → existing/added table)
+## Core source tables
 
-| Spec table      | Actual table       | Notes                                                        |
-|-----------------|--------------------|--------------------------------------------------------------|
-| `sources`       | `data_sources`     | `name`, `source_type`, `base_url`, `active`,`min_delay_seconds` + `last_success_at`/`last_failure_reason`. Seed adds 11 `LIVE_SCRAPE` rows (migration 0007 is not required for this — the table already existed). |
-| `scraper_runs`  | `ingestion_runs`   | `data_source_id`, `triggered_by`, `started_at`, `completed_at`, `status` (`RUNNING/SUCCESS/SOURCE_UNAVAILABLE/FAILED`), `rows_collected/valid/invalid/suspicious/unavailable`, `error_message`. |
-| `fare_results`  | `fare_observations`| Normalized rows on the canonical schema (see `CANONICAL_COLUMNS`). |
-| `fare_searches` | `fare_searches`    | NEW (migration `0007`): audit of each search attempt.        |
-| `scraper_errors`| `scraper_errors`   | NEW (migration `0007`): per-source compliance/error log.      |
+### `cpi_airfare_index` — official MoSPI CPI airfare series
 
-## New tables (0007_add_scraper_tables)
+Model: `app.models.cpi.CpiAirfareIndex` (migration `0004`).
 
-```sql
-scraper_errors (
-  id, source_name varchar(100) index, error_type varchar(50),
-  message text, occurred_at timestamptz, scraper_run_id int -> ingestion_runs.id
-)
+| Column            | Type          | Notes                                              |
+|-------------------|---------------|----------------------------------------------------|
+| `period`          | `VARCHAR(7)`  | `YYYY-MM`, unique index.                           |
+| `data_date`       | `DATE`        | Mid-month reference (15th of the month).           |
+| `airfare_index`   | `FLOAT`       | CPI code 07.3.3.1, base 2024=100. **Not nullable.**|
+| `transport_index` | `FLOAT`       | Transport division (code 07) — retained, legacy.   |
+| `general_index`   | `FLOAT`       | All-items CPI (code 00) — retained, legacy.        |
+| `inflation_yoy` / `inflation_mom` | `FLOAT` | Inflation metrics.                          |
+| `source` / `source_url` / `cpi_code` / `base_year` | `VARCHAR` | Provenance (`MOSPI_CPI`, `07.3.3.1`, `2024=100`). |
+| `fetched_at` / `created_at` | `TIMESTAMPTZ` | Audit timestamps.                         |
 
-fare_searches (
-  id, source_name varchar(100) index, origin char(3), destination char(3),
-  travel_date varchar(10), booking_window_days int, request_params text,
-  status varchar(20), rows_returned int, latency_ms float,
-  searched_at timestamptz, error_message text
-)
-```
+### `fare_observations` — live Google Flights feed
 
-`error_type` values: `ROBOTS_DISALLOWED`, `EDGE_BLOCK`, `NETWORK`,
-`PARSE`, `UNEXPECTED`.
+Model: `app.models.observations.FareObservation`. One row per
+(route, airline, flight, travel_date, collection_timestamp) normalized
+fare quote — the output of `data_processing.run_pipeline()` for the
+`GOOGLE_FLIGHTS_API` source.
 
-## Scraper fare model vs canonical pipeline schema
+| Column                | Type              | Notes                                               |
+|-----------------------|-------------------|-----------------------------------------------------|
+| `observation_id`      | `VARCHAR(16)`     | Dedup hash, unique index.                           |
+| `origin` / `destination` | `VARCHAR(3)`   | IATA airport codes, indexed.                        |
+| `airline` / `flight_number` | `VARCHAR`   | Airline name (+ optional flight number).            |
+| `travel_date`         | `DATE`            | Indexed.                                            |
+| `collection_timestamp`| `TIMESTAMPTZ`     | When the fare was collected.                        |
+| `booking_window_days` | `INT`             | T+n window, indexed.                                |
+| `fare_class` / `base_fare` / `taxes_fees` / `total_fare` / `currency` | — | Fare components (currency defaults to INR). |
+| `source` / `source_type` | `VARCHAR`      | `GOOGLE_FLIGHTS_API` / `LIVE_SCRAPE`.               |
+| `data_quality_status` / `quality_flags` | `VARCHAR` | `VALID` / `SUSPICIOUS` / `INVALID` / `UNAVAILABLE` + flags. |
+| `ingestion_run_id`    | `INT` → `ingestion_runs.id` | FK back to the run that collected the row.  |
 
-`ingestion/scrapers/fare_model.py` defines the richer scraper record
-(`STANDARD_FARE_COLUMNS`: flight_number, departure/arrival, duration,
-stops, baggage, refundable, meal, fare_family, deep_link, quality_hint).
+### `data_sources` — registered sources
 
-`to_canonical_columns()` maps it onto the backend's fixed
-`CANONICAL_COLUMNS`, which is what the pipeline, tests, and frontend
-already consume:
+Model: `app.models.reference.DataSource`. Exactly two seeded rows:
+`MOSPI_CPI` (`PUBLIC_DATASET`) and `GOOGLE_FLIGHTS_API` (`LIVE_SCRAPE`).
 
-- Enrichment columns not in the canonical table (`deep_link`,
-  `fare_family`, `baggage_kg`, …) are carried at the raw scraper layer and
-  dropped from the canonical frame — never leaked into pipeline logic.
-- When a source returns only `total_fare`, the documented 72/28
-  base/tax split is applied (existing `normalize_raw_observations`
-  behavior); otherwise source-provided `base_fare`/`taxes_fees` pass
-  through untouched.
-- `source` / `source_type` are stamped per row for provenance.
+### `ingestion_runs` — run tracking
 
-## Provenance
+Model: `app.models.ingestion.IngestionRun`. One row per collection or
+refresh attempt: `data_source_id`, `triggered_by` (`scheduler` or a user
+email), `started_at`/`completed_at`, `status`
+(`RUNNING` / `SUCCESS` / `SOURCE_UNAVAILABLE` / `FAILED`), row counts
+(collected/valid/invalid/suspicious/unavailable), `error_message`, and
+`raw_payload_path` for archived pre-normalization payloads.
 
-Every `FareObservation` generated by these adapters carries
-`source=SOME_WEB` and `source_type=LIVE_SCRAPE`, so the UI can always
-label demo vs live vs unavailable data honestly.
+## Reference & configuration
+
+- **`routes`** (`app.models.reference.Route`) — origin/destination pair
+  (unique constraint), `weight`, `distance_tier`, `active`. Seeded from
+  `app.services.route_basket.ROUTE_BASKET` (16 routes); admin-editable.
+- **`airlines`** (`app.models.reference.Airline`) — derived from
+  observed airline names, with a known-IATA map.
+- **`booking_window_configs`** — configurable T+n windows (T+1, T+7,
+  T+15, T+30, T+45) and their weights.
+
+## Index engine output
+
+- **`index_configs`** (`app.models.index.IndexConfigModel`) — active
+  `base_period`, `methodology_version`, `booking_window_weights`,
+  `include_suspicious`, `created_by`/notes.
+- **`index_runs`** (`app.models.index.IndexRun`) — persisted output of
+  `index_engine.compute_index()`: `as_of_period`, `index_value`,
+  `change_from_base_pct`, `n_observations_used`, `routes_missing_data`,
+  and the `calculation_breakdown` transparency trace.
+- **`index_route_contributions`** / **`index_airline_contributions`** —
+  per-route and per-airline contribution breakdown for each run.
+
+Auth (`users`) and the rest of the backend follow the same Alembic
+baseline; see `backend/app/models/` for the full model set.
+
+## Applied migrations
+
+| Revision | Purpose                                            |
+|----------|----------------------------------------------------|
+| `0001_initial_schema` | Baseline autogenerate from the models (drift-free). |
+| `0002` … `0007`      | Username column, observation indexes, CPI airfare index, intermediate tables (later dropped). |
+| `0008_drop_unused_source_tables` | Dropped `scraper_errors`, `fare_searches`, `wpi_atf_index`, `dgca_route_traffic`. |
+
+`alembic upgrade head` applies everything; `alembic check` verifies zero
+drift against the models.
