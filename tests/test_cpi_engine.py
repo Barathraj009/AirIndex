@@ -1,25 +1,40 @@
+"""Real-data smoke tests for the two-source AirIndex backend. Phase 4 demo
+scaffolding, the WPI-ATF fuel backdrop, DGCA city-pair traffic, and the 11-
+scraper framework were removed in the real-data re-scope. The product graph is
+built from exactly two live sources: Google Flights fare observations (replayed
+from the bundled CSV) chained to the official MoSPI CPI airfare index.
+
+These tests exercise the replay-data loaders and the combined-series builder
+that produce the graph the frontend draws."""
+
 import unittest
-from app.services.cpi_engine import simulate_cpi_augmentation, HISTORICAL_MOSPI_CPI
+
+from app.services.replay_data import google_flights_replay, mospi_cpi_replay
+from app.services.route_basket import ROUTE_BASKET
+from app.services.combined_series import resolve_base_period, build_combined_series
 
 
-class TestCpiEngine(unittest.TestCase):
-    def test_cpi_simulation_basic(self):
-        apix_series = {
-            "2026-01": 100.0,
-            "2026-02": 105.0,
-            "2026-03": 110.0,
-        }
-        res = simulate_cpi_augmentation(apix_series)
-        self.assertTrue(len(res.points) > 0)
-        self.assertIn("airfare_weight_pct", res.as_dict())
-        self.assertIn("mean_headline_delta_bps", res.as_dict())
-        self.assertGreater(res.lag_reduction_days_est, 0)
+class TestReplayData(unittest.TestCase):
+    def test_google_replay_is_two_source_google(self):
+        rows = google_flights_replay()
+        self.assertTrue(len(rows) >= 10)
+        sources = {r["source"] for r in rows}
+        self.assertEqual(sources, {"GOOGLE_FLIGHTS_API"})
 
-    def test_cpi_custom_weights(self):
-        apix_series = {"2026-01": 100.0, "2026-02": 120.0}
-        res_standard = simulate_cpi_augmentation(apix_series, airfare_weight_in_cpi=0.002)
-        res_higher = simulate_cpi_augmentation(apix_series, airfare_weight_in_cpi=0.01)
-        self.assertGreater(res_higher.max_headline_delta_bps, res_standard.max_headline_delta_bps)
+    def test_mospi_cpi_replay_is_mospi(self):
+        rows = mospi_cpi_replay()
+        self.assertTrue(len(rows) >= 12)
+        for r in rows:
+            self.assertEqual(r["source"], "MOSPI_CPI")
+            self.assertEqual(r["cpi_code"], "07.3.3.1")
+
+    def test_route_basket_weights_sum_to_one(self):
+        total = sum(w for _, (w, _) in ROUTE_BASKET.items())
+        self.assertAlmostEqual(total, 1.0, places=6)
+        self.assertEqual(len(ROUTE_BASKET), 16)
+
+    def test_resolve_base_period_demo(self):
+        self.assertEqual(resolve_base_period("2025-01", {"2025-01", "2025-02"}), "2025-01")
 
 
 if __name__ == "__main__":
