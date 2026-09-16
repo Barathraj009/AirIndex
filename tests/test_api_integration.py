@@ -30,6 +30,20 @@ os.environ["JWT_SECRET_KEY"] = "integration-test-secret-not-for-production"
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT))
 
+from sqlalchemy import create_engine, text  # noqa: E402
+
+_reach_engine = create_engine(
+    "postgresql+psycopg2://airindex:airindex_dev_secret@localhost:5432/airindex_test",
+    connect_args={"connect_timeout": 2},
+)
+try:
+    with _reach_engine.connect() as c:
+        c.execute(text("SELECT 1"))
+    POSTGRES_AVAILABLE = True
+except Exception:
+    POSTGRES_AVAILABLE = False
+del _reach_engine
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core.database import engine, SessionLocal  # noqa: E402
@@ -51,6 +65,14 @@ def _wipe_all_tables():
         db.close()
 
 
+@unittest.skipUnless(
+    POSTGRES_AVAILABLE,
+    "airindex_test PostgreSQL (localhost:5432) is not reachable; "
+    "the live-Postgres API integration suite is skipped. Start the "
+    "Postgres test instance (e.g. `docker compose up -d test-db`) "
+    "to run it. Only the two live sources' request stack is covered "
+    "here; the replay/combined offline suite always runs.",
+)
 class APIIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
