@@ -8,7 +8,7 @@ table is populated at server startup by the lifespan hook in main.py
 (fetching live data from api.mospi.gov.in).
 
 If the observation/reference tables are empty, the bundled Google Flights
-and MoSPI replay captures (real, provenance-labelled records from the
+and MoSPI captures (real, provenance-labelled records from the
 licensed Google Flights feed and api.mospi.gov.in) are loaded so that the
 deployed app always renders real values — no external key required.
 
