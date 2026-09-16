@@ -14,7 +14,7 @@ import { movingAverage, computeSeasonality, computeVolatility, fmt } from '../ut
 import { downloadCSV, exportChartAsPNG } from '../utils/exportChart'
 import type { CpiAirfareTrend, Route, CpiForecastResult, CpiAirfareTrendPoint } from '../types'
 
-type AnalysisTab = 'trend' | 'inflation' | 'components' | 'routes' | 'forecast' | 'seasonality'
+type AnalysisTab = 'trend' | 'inflation' | 'routes' | 'forecast' | 'seasonality'
 type ChartMode = '2d' | '3d' | 'webgl'
 
 function ModePicker({ mode, onChange, showWebgl = true }: { mode: ChartMode; onChange: (m: ChartMode) => void; showWebgl?: boolean }) {
@@ -80,7 +80,6 @@ export default function Analysis() {
           { key: 'forecast', label: 'Forecast' },
           { key: 'seasonality', label: 'Seasonality & Volatility' },
           { key: 'inflation', label: 'Inflation' },
-          { key: 'components', label: 'Airfare vs Transport' },
           { key: 'routes', label: 'Route Basket' },
         ]}
         active={tab}
@@ -93,7 +92,6 @@ export default function Analysis() {
           {tab === 'forecast' && <ForecastTab />}
           {tab === 'seasonality' && <SeasonalityTab />}
           {tab === 'inflation' && <InflationTab />}
-          {tab === 'components' && <ComponentsTab />}
           {tab === 'routes' && <RoutesTab />}
         </ErrorBoundary>
       </div>
@@ -125,8 +123,8 @@ function TrendTab() {
   }
 
   const csvRows = {
-    headers: ['Period', 'Airfare CPI', 'Transport CPI', '3-month avg'],
-    rows: data.map((p) => [p.period, p.airfare_index, p.transport_index, p.ma3]),
+    headers: ['Period', 'Airfare CPI', '3-month avg'],
+    rows: data.map((p) => [p.period, p.airfare_index, p.ma3]),
   }
 
   return (
@@ -144,7 +142,7 @@ function TrendTab() {
       }
     >
       <p className="pb-4 text-xs text-muted">
-        Monthly values of the airfare price index (base 2024 = 100), alongside the wider transport index.
+        Monthly values of the official airfare price index (base 2024 = 100, MoSPI 07.3.3.1) with its 3-month moving average.
       </p>
       <div ref={chartRef}>
         {mode === '3d' ? (
@@ -259,7 +257,7 @@ function ForecastTab() {
 
       <Card title="Short-term airfare projection" action={<ExportButtons targetName="airfare-forecast" chartRef={chartRef} csvRows={csvRows} />}>
         <p className="pb-4 text-xs text-muted">
-          Dotted segments are a statistical projection (Holt-Winters / linear trend) computed from observed data. Shaded bands are 80% and 95% confidence intervals.
+          Dotted segments are a statistical projection (Holt&rsquo;s linear trend, double exponential smoothing) computed from observed data. Shaded bands are 80% and 95% confidence intervals.
         </p>
         <div ref={chartRef}>
           <ResponsiveContainer width="100%" height={360}>
@@ -320,7 +318,7 @@ function SeasonalityTab() {
     <div className="space-y-5">
       <Card title="Month-of-year seasonality" action={<ExportButtons targetName="seasonality" chartRef={chartRef} csvRows={csvRows} />}>
         <p className="pb-4 text-xs text-muted">
-          Average airfare index by calendar month, expressed as % deviation from the overall average. Warm cells = pricier months to fly.
+          Average airfare index by calendar month, expressed as % deviation from that calendar year&rsquo;s typical level (de-trended so the rising index base does not mask the true seasonal pattern). Warm cells = pricier months to fly.
         </p>
         <div ref={chartRef}>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
@@ -420,9 +418,9 @@ function InflationTab() {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-xl border border-line bg-white p-4 shadow-card">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">12-mo avg YoY inflation</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Avg YoY inflation</div>
           <div className="mt-1.5 text-2xl font-bold text-ink tabular-nums">{avg.toFixed(2)}%</div>
-          <div className="mt-1 text-xs text-muted">average over the available YoY months</div>
+          <div className="mt-1 text-xs text-muted">average over the last {yoyPoints.length} available YoY months</div>
         </div>
         <div className="rounded-xl border border-line bg-white p-4 shadow-card">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Latest month</div>
@@ -441,8 +439,8 @@ function InflationTab() {
       >
         <p className="pb-4 text-xs text-muted">
           Airfare inflation vs the same month a year earlier. Positive bars = fares more expensive than a year ago. The gap
-          before Jan 2026 is because the base 2024=100 MoSPI series only began in Jan 2025 — a full year is needed to compute
-          YoY.
+          at the start of the window is because the base 2024=100 MoSPI series begins in Jan 2024 — a full year is needed
+          before the first YoY value (Jan 2025).
         </p>
         <div ref={chartRef}>
           {mode === '3d' ? (
@@ -481,130 +479,16 @@ function InflationTab() {
   )
 }
 
-function ComponentsTab() {
-  const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=12')
-  const [mode, setMode] = useState<ChartMode>('2d')
-  const chartRef = useRef<HTMLDivElement>(null)
-
-  if (trend.loading) return <LoadingState label="Loading component comparison..." />
-  if (trend.error) return <ErrorState message={trend.error} onRetry={trend.refetch} />
-
-  const data = trend.data?.series ?? []
-  if (data.length === 0) {
-    return (
-      <Card>
-        <EmptyState message="Component comparison will appear once index data is available." />
-      </Card>
-    )
-  }
-
-  const csvRows = {
-    headers: ['Period', 'Airfare CPI', 'Transport CPI', 'Gap %'],
-    rows: data.map((p) => {
-      const gap = p.transport_index && p.transport_index > 0 ? ((p.airfare_index - p.transport_index) / p.transport_index) * 100 : null
-      return [p.period, p.airfare_index, p.transport_index, gap]
-    }),
-  }
-
-  return (
-    <div className="space-y-5">
-      <Card
-        title="Airfare vs Transport"
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <ModePicker mode={mode} onChange={setMode} />
-            <ExportButtons targetName="airfare-vs-transport" chartRef={chartRef} csvRows={csvRows} />
-          </div>
-        }
-      >
-        <p className="pb-4 text-[11px] text-muted">
-          Both indices share base year 2024=100. The gap shows how much faster airfares climb than transport prices overall.
-        </p>
-        <div ref={chartRef}>
-          {mode === '3d' ? (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div>
-                <p className="pb-2 text-center text-xs font-semibold text-brand-700">Airfare CPI</p>
-                <IsometricChart
-                  data={data.map((p) => ({ label: p.period, value: p.airfare_index, color: '#1471e8' }))}
-                  height={280}
-                  valueFormatter={(v) => v.toFixed(2)}
-                />
-              </div>
-              <div>
-                <p className="pb-2 text-center text-xs font-semibold text-sky-600">Transport CPI</p>
-                <IsometricChart
-                  data={data.map((p) => ({ label: p.period, value: p.transport_index ?? p.airfare_index, color: '#0ea5e9' }))}
-                  height={280}
-                  valueFormatter={(v) => v.toFixed(2)}
-                />
-              </div>
-            </div>
-          ) : mode === 'webgl' ? (
-            <WebGL3DChart
-              data={data.map((p) => ({ label: p.period, value: p.airfare_index, color: '#1471e8' }))}
-              height={320}
-              valueFormatter={(v) => v.toFixed(2)}
-            />
-          ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="period" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#0f172a', fontWeight: 600 }} />
-                <Legend />
-                <Bar dataKey="airfare_index" name="Airfare CPI" fill="#1471e8" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                <Bar dataKey="transport_index" name="Transport CPI" fill="#0ea5e9" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
-      <Card>
-        <div className="overflow-x-auto rounded-lg border border-line">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-muted border-b border-line bg-slate-50">
-                <th className="py-2.5 px-3 font-medium">Period</th>
-                <th className="py-2.5 px-3 text-right font-medium">Airfare CPI</th>
-                <th className="py-2.5 px-3 text-right font-medium">Transport CPI</th>
-                <th className="py-2.5 px-3 text-right font-medium">Transport vs Airfare</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((p) => {
-                const gap = p.transport_index && p.transport_index > 0 ? ((p.airfare_index - p.transport_index) / p.transport_index) * 100 : null
-                return (
-                  <tr key={p.period} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
-                    <td className="py-2.5 px-3 font-medium text-ink">{p.period}</td>
-                    <td className="py-2.5 px-3 text-right tabular-nums">{p.airfare_index.toFixed(2)}</td>
-                    <td className="py-2.5 px-3 text-right tabular-nums text-muted">
-                      {p.transport_index !== null ? p.transport_index.toFixed(2) : '\u2014'}
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      {gap !== null ? <TrendPill value={gap} /> : '\u2014'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  )
-}
-
 function RoutesTab() {
   const routesQuery = useApiQuery<Route[]>('/routes')
   const [mode, setMode] = useState<ChartMode>('2d')
 
   const routes = routesQuery.data ?? []
   const sorted = useMemo(() => [...routes].sort((a, b) => b.weight - a.weight), [routes])
+  const totalWeight = useMemo(() => sorted.reduce((s, r) => s + r.weight, 0), [sorted])
   const rows = useMemo(
-    () => sorted.map((r) => ({ route: `${r.origin}\u2013${r.destination}`, weight: r.weight })),
-    [sorted]
+    () => sorted.map((r) => ({ route: `${r.origin}\u2013${r.destination}`, weight: totalWeight > 0 ? r.weight / totalWeight : 0 })),
+    [sorted, totalWeight]
   )
 
   if (routesQuery.loading) return <LoadingState label="Loading route basket..." />
@@ -620,7 +504,7 @@ function RoutesTab() {
           <EmptyState message="Route basket is empty." />
         ) : mode === '3d' ? (
           <IsometricChart
-            data={sorted.map((r) => ({ label: `${r.origin}\u2013${r.destination}`, value: r.weight * 100, color: '#1471e8' }))}
+            data={sorted.map((r) => ({ label: `${r.origin}\u2013${r.destination}`, value: totalWeight > 0 ? (r.weight / totalWeight) * 100 : 0, color: '#1471e8' }))}
             height={300}
             valueFormatter={(v) => `${v.toFixed(1)}%`}
           />
@@ -648,7 +532,9 @@ function RoutesTab() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((r) => (
+              {sorted.map((r) => {
+                const share = totalWeight > 0 ? (r.weight / totalWeight) * 100 : 0
+                return (
                 <tr key={r.id} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
                   <td className="py-2.5 px-3 font-medium text-ink">
                     <span className="rounded-md bg-brand-500/10 px-2 py-0.5 font-mono text-xs text-brand-700">
@@ -656,17 +542,18 @@ function RoutesTab() {
                     </span>
                   </td>
                   <td className="py-2.5 px-3 text-muted">{r.distance_tier ?? '\u2014'}</td>
-                  <td className="py-2.5 px-3 text-right tabular-nums">{(r.weight * 100).toFixed(2)}%</td>
+                  <td className="py-2.5 px-3 text-right tabular-nums">{share.toFixed(2)}%</td>
                   <td className="py-2.5 px-3">
                     <div className="flex items-center justify-end gap-2.5">
                       <div className="h-1.5 w-28 rounded-full bg-lineSoft overflow-hidden">
-                        <div className="h-full rounded-full bg-brand-gradient" style={{ width: `${Math.min(100, r.weight * 500)}%` }} />
+                        <div className="h-full rounded-full bg-brand-gradient" style={{ width: `${Math.min(100, share * 5)}%` }} />
                       </div>
-                      <span className="text-xs text-muted tabular-nums">{(r.weight * 100).toFixed(1)}%</span>
+                      <span className="text-xs text-muted tabular-nums">{share.toFixed(1)}%</span>
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

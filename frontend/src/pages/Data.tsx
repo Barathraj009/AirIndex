@@ -58,7 +58,6 @@ export default function Data() {
               <tr className="text-left text-muted border-b border-line bg-slate-50">
                 <th className="py-2.5 px-3 font-medium">Period</th>
                 <th className="py-2.5 px-3 text-right font-medium">Airfare CPI</th>
-                <th className="py-2.5 px-3 text-right font-medium">Transport CPI</th>
                 <th className="py-2.5 px-3 text-right font-medium">MoM %</th>
                 <th className="py-2.5 px-3 text-right font-medium">YoY %</th>
               </tr>
@@ -68,9 +67,6 @@ export default function Data() {
                 <tr key={p.period} className="border-b border-lineSoft hover:bg-slate-50 transition-colors">
                   <td className="py-2 px-3 font-medium text-ink">{p.period}</td>
                   <td className="py-2 px-3 text-right tabular-nums">{p.airfare_index.toFixed(2)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums text-muted">
-                    {p.transport_index != null ? p.transport_index.toFixed(2) : '\u2014'}
-                  </td>
                   <td className="py-2 px-3 text-right"><TrendPill value={p.mom_pct} /></td>
                   <td className="py-2 px-3 text-right"><TrendPill value={p.inflation_yoy} /></td>
                 </tr>
@@ -80,7 +76,7 @@ export default function Data() {
         </div>
         <p className="mt-3 text-[11px] text-muted">
           MoM % needs the previous month, so the first period is always blank. YoY % compares with the same month one year
-          earlier; the MoSPI basket is base 2024=100 and only began in Jan 2025, so YoY figures start from Jan 2026.
+          earlier; since the base 2024=100 MoSPI series begins in Jan 2024, YoY figures are not available until Jan 2025.
         </p>
       </Card>
     </div>

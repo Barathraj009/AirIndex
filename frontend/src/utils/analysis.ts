@@ -19,13 +19,34 @@ export function movingAverage(values: number[], window: number): (number | null)
 
 export function computeSeasonality(series: CpiAirfareTrendPoint[]): SeasonalityRow[] {
   const buckets: Record<number, { sum: number; count: number }> = {}
+  const yearSums: Record<string, { sum: number; count: number }> = {}
   for (const p of series) {
-    const month = parseInt(p.period.split('-')[1], 10)
+    const parts = p.period.split('-')
+    const month = parseInt(parts[1], 10)
     if (!month) continue
     if (!buckets[month]) buckets[month] = { sum: 0, count: 0 }
     buckets[month].sum += p.airfare_index
     buckets[month].count += 1
+    if (!yearSums[parts[0]]) yearSums[parts[0]] = { sum: 0, count: 0 }
+    yearSums[parts[0]].sum += p.airfare_index
+    yearSums[parts[0]].count += 1
   }
+  const yearMean: Record<string, number> = {}
+  for (const [year, v] of Object.entries(yearSums)) yearMean[year] = v.sum / v.count
+
+  // De-trend: measure each observation against its own calendar year's mean,
+  // so the calendar-month pattern is not dominated by the index level rising
+  // from ~100 (2024) to ~126 (2026).
+  const devBuckets: Record<number, number[]> = {}
+  for (const p of series) {
+    const parts = p.period.split('-')
+    const month = parseInt(parts[1], 10)
+    const ym = yearMean[parts[0]]
+    if (!month || !ym) continue
+    if (!devBuckets[month]) devBuckets[month] = []
+    devBuckets[month].push(((p.airfare_index - ym) / ym) * 100)
+  }
+
   const rows: SeasonalityRow[] = []
   for (let m = 1; m <= 12; m++) {
     const b = buckets[m]
@@ -34,14 +55,11 @@ export function computeSeasonality(series: CpiAirfareTrendPoint[]): SeasonalityR
       continue
     }
     const avgIndex = b.sum / b.count
-    rows.push({ month: MONTH_NAMES[m - 1], avgIndex, deviationPct: 0, count: b.count })
+    const devs = devBuckets[m] ?? []
+    const deviationPct = devs.length ? devs.reduce((a, b) => a + b, 0) / devs.length : 0
+    rows.push({ month: MONTH_NAMES[m - 1], avgIndex, deviationPct, count: b.count })
   }
-  const populated = rows.filter((r) => r.count > 0)
-  const overallAvg = populated.length ? populated.reduce((a, b) => a + b.avgIndex, 0) / populated.length : 0
-  return rows.map((r) => ({
-    ...r,
-    deviationPct: r.count > 0 && overallAvg > 0 ? ((r.avgIndex - overallAvg) / overallAvg) * 100 : 0,
-  }))
+  return rows
 }
 
 export interface VolatilityBucket {

@@ -38,28 +38,7 @@ from app.models.cpi import CpiAirfareIndex
 from app.models.observations import FareObservation
 from app.services.index_engine import METHODOLOGY_VERSION
 from app.services.replay_data import google_flights_replay, mospi_cpi_replay
-
-# The route basket used by index_engine (weight = share of all-India
-# domestic air passenger traffic). These are the routes covered by the
-# MoSPI CPI airfare component (07.3.3.1).
-ROUTE_BASKET = {
-    "DEL-BOM": (0.13, "MEDIUM"),
-    "DEL-BLR": (0.11, "MEDIUM"),
-    "BOM-BLR": (0.09, "MEDIUM"),
-    "DEL-CCU": (0.08, "SHORT"),
-    "DEL-HYD": (0.09, "SHORT"),
-    "BLR-HYD": (0.07, "SHORT"),
-    "DEL-MAA": (0.08, "MEDIUM"),
-    "BOM-MAA": (0.07, "MEDIUM"),
-    "DEL-GOI": (0.05, "MEDIUM"),
-    "BOM-GOI": (0.04, "MEDIUM"),
-    "BLR-CCU": (0.04, "LONG"),
-    "DEL-TRV": (0.04, "LONG"),
-    "BOM-HYD": (0.03, "SHORT"),
-    "DEL-PNQ": (0.02, "SHORT"),
-    "BLR-MAA": (0.02, "SHORT"),
-    "BOM-CCU": (0.02, "LONG"),
-}
+from app.services.route_basket import ROUTE_BASKET
 
 DATA_SOURCES = [
     ("MOSPI_CPI", "PUBLIC_DATASET"),
@@ -79,7 +58,7 @@ def bootstrap():
                 origin, dest = route.split("-")
                 db.add(Route(origin=origin, destination=dest, weight=weight, distance_tier=tier))
             db.commit()
-            print(f"Seeded {len(ROUTE_BASKET)} routes.")
+            print(f"Seeded {len(ROUTE_BASKET)} routes (canonical basket, sum={sum(w for w, _ in ROUTE_BASKET.values()):.2f}).")
 
         for sname, stype in DATA_SOURCES:
             if db.query(DataSource).filter(DataSource.name == sname).first() is None:
