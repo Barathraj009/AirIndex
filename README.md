@@ -248,6 +248,14 @@ seeded by `bootstrap_reference.py` in production and
 `seed_database.py` for local dev). Daily cadence ≈ 180 RapidAPI
 requests/month on 6 routes.
 
+**One-time Render setup (production):** the backend service declares
+`RAPIDAPI_KEY` with `sync: false` in `render.yaml`, so the key itself is
+never stored in the repo. Paste the RapidAPI key in the Render dashboard
+(backend service → Settings → Environment → `RAPIDAPI_KEY`, then a manual
+deploy). Until that's done the deployed app still renders real data — the
+bundled 2026-09-16 live capture replay + MoSPI index — but the scheduled
+ingestion reports the Google Flights feed as SOURCE UNAVAILABLE.
+
 ### Official MoSPI index (07.3.3.1)
 
 The MoSPI CPI airfare index (code **07.3.3.1**, base **2024=100**) is
