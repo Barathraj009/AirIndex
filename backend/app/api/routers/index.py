@@ -3,9 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.deps import require_permission
-from app.api.query_helpers import load_observations_df
+from app.api.query_helpers import active_route_weights, load_observations_df
 from app.services.index_engine import IndexConfig, compute_index, compute_index_series
-from app.models.reference import Route
 from app.models.index import IndexConfigModel
 from app.schemas.index import IndexConfigIn, IndexResultOut, IndexTrendOut
 
@@ -13,8 +12,7 @@ router = APIRouter(prefix="/api/index", tags=["index"])
 
 
 def _active_config_and_weights(db: Session):
-    routes = db.query(Route).filter(Route.active == True).all()  # noqa: E712
-    route_weights = {r.route_key: r.weight for r in routes}
+    route_weights = active_route_weights(db)
     active = db.query(IndexConfigModel).filter(IndexConfigModel.is_active == True).first()  # noqa: E712
     if active is None:
         raise HTTPException(status_code=409, detail="no_active_index_configuration")

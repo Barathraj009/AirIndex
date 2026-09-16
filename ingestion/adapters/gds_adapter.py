@@ -1,9 +1,22 @@
 """Google Flights (via RapidAPI) — Live GDS/Fare Adapter.
 
-Fetches one-way domestic Indian fares from Google Flights' price calendar
-through RapidAPI. Each route (origin -> destination) is queried once, and
-results are filtered to exact travel dates that match the requested booking
-windows.
+Fetches Indian domestic fares from Google Flights' per-day price calendar
+through RapidAPI (provider ``google-flights8``).  One "price graph" request
+per route returns a ~90-day calendar of cheapest fares, so a single call
+covers all configured booking windows (T+1 / T+7 / T+15 / T+30 / T+45).
+
+Provider quirk handled here: when the requested centre date is close to
+"today" the price-graph comes back sparse (+-3 days, every-other-day),
+whereas a centre date ~30+ days out returns the full 91-day range.  We
+therefore query with ``as_of + 30`` as the centre (which spans every
+requested window) and only issue a second, near-date call when a window
+is still missing from the response.
+
+The provider only serves calendar prices in USD regardless of the
+``currency`` request parameter, so each observation is converted to INR
+using ``FX_RATE_USD_INR`` (see .env.example). A constant FX factor cancels
+out in day-over-day index arithmetic, so the index and change analysis are
+unaffected by the conversion choice.
 """
 
 from __future__ import annotations
@@ -30,8 +43,10 @@ from ingestion.adapters.base import (  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://google-flights8.p.rapidapi.com/api/flights/getPriceCalendar"
+API_URL = "https://google-flights8.p.rapidapi.com/api/v1/flights/price-graph/one-way"
 API_HOST = "google-flights8.p.rapidapi.com"
+
+DEFAULT_FX_USD_INR = 90.0
 
 
 class GdsAdapter(BaseSourceAdapter):
@@ -61,6 +76,13 @@ class GdsAdapter(BaseSourceAdapter):
             "User-Agent": user_agent,
         }
 
+    @staticmethod
+    def _fx_rate() -> float:
+        try:
+            return float(os.environ.get("FX_RATE_USD_INR", DEFAULT_FX_USD_INR))
+        except (TypeError, ValueError):
+            return DEFAULT_FX_USD_INR
+
     def _parse_flight_day(
         self,
         item: dict,
@@ -69,44 +91,30 @@ class GdsAdapter(BaseSourceAdapter):
         collection_date: date,
         valid_dates: set[str],
     ) -> dict | None:
-        date_str = item.get("date") or item.get("travel_date") or item.get("departureDate") or ""
-        if not date_str:
-            return None
-
+        date_str = item.get("departureDate") or item.get("date") or ""
         normalized_date = date_str[:10]
         if normalized_date not in valid_dates:
             return None
 
-        price_raw = item.get("price")
-        if price_raw is None:
-            price_raw = item.get("totalFare") or item.get("fare") or item.get("minPrice")
-        if price_raw is None:
+        price_usd = item.get("price")
+        if price_usd is None:
+            return None
+        try:
+            price_usd = float(price_usd)
+        except (TypeError, ValueError):
+            return None
+        if price_usd <= 0:
             return None
 
-        if isinstance(price_raw, dict):
-            total_fare = price_raw.get("low") or price_raw.get("min") or price_raw.get("price")
-        else:
-            total_fare = price_raw
-
-        if total_fare is None:
-            return None
-        total_fare = float(total_fare)
-        if total_fare <= 0:
-            return None
-
+        total_fare = round(price_usd * self._fx_rate(), 2)
         travel_date = pd.to_datetime(normalized_date).date()
         booking_window = (travel_date - collection_date).days
-
-        airlines = item.get("airlines") or item.get("airline") or []
-        if isinstance(airlines, str):
-            airlines = [airlines]
-        airline = airlines[0] if airlines else None
 
         return {
             "observation_id": None,
             "origin": origin,
             "destination": destination,
-            "airline": airline,
+            "airline": "MULTI",
             "flight_number": None,
             "travel_date": travel_date,
             "collection_timestamp": collection_date,
@@ -154,18 +162,70 @@ class GdsAdapter(BaseSourceAdapter):
 
         min_days = min(request.booking_windows)
         max_days = max(request.booking_windows)
-        date_from = request.as_of + timedelta(days=min_days)
-        date_to = request.as_of + timedelta(days=max_days)
+        # Query the price graph centred far enough ahead that the provider
+        # returns the full 91-day calendar (it returns only a sparse +-3-day
+        # sample for centres close to today). Centre at as_of+30 spans every
+        # requested window (range is roughly as_of .. as_of+90).
+        far_center = request.as_of + timedelta(days=30)
+        near_center = request.as_of + timedelta(days=8)
 
         valid_dates: set[str] = {
             (request.as_of + timedelta(days=bw)).isoformat()
             for bw in request.booking_windows
         }
 
+        def _fetch_prices(center: date, route_str: str,
+                          origin: str, destination: str) -> list[dict]:
+            params = {
+                "origin": origin,
+                "destination": destination,
+                "date": center.isoformat(),
+                "currency": "USD",
+            }
+            logger.info(
+                "Fetching price graph %s -> %s  (centre %s)",
+                origin, destination, center.isoformat(),
+            )
+            try:
+                response = client.get(
+                    API_URL, headers=headers, params=params
+                )
+                if response.status_code != 200:
+                    self._handle_http_error(
+                        response.raise_for_status(), route_str
+                    )
+                body = response.json()
+            except SourceUnavailableError:
+                raise
+            except httpx.HTTPStatusError as exc:
+                self._handle_http_error(exc, route_str)
+            except httpx.RequestError as exc:
+                logger.error(
+                    "Network error for route %s: %s", route_str, exc
+                )
+                raise SourceUnavailableError(
+                    self.source_name, f"network_error: {exc}"
+                ) from exc
+            except Exception as exc:
+                logger.error(
+                    "Unexpected error for route %s: %s", route_str, exc
+                )
+                raise SourceUnavailableError(
+                    self.source_name, f"HTTP {getattr(exc, 'response', None) and exc.response.status_code or 'unknown'}"
+                ) from exc
+
+            prices = body.get("prices") or []
+            if not prices and body.get("message"):
+                raise SourceUnavailableError(
+                    self.source_name,
+                    f"provider_error: {body.get('message')}",
+                )
+            return prices
+
         all_rows: list[dict] = []
 
         try:
-            client = httpx.Client(timeout=30.0)
+            client = httpx.Client(timeout=45.0)
         except Exception as exc:
             raise SourceUnavailableError(
                 self.source_name, f"Failed to create HTTP client: {exc}"
@@ -179,69 +239,54 @@ class GdsAdapter(BaseSourceAdapter):
                     logger.warning("Skipping route %s: %s", route_str, exc)
                     continue
 
-                params = {
-                    "origin": origin,
-                    "destination": destination,
-                    "fromDate": date_from.strftime("%d/%m/%Y"),
-                    "toDate": date_to.strftime("%d/%m/%Y"),
-                }
-
+                rows: list[dict] = []
+                far_prices = _fetch_prices(far_center, route_str,
+                                           origin, destination)
                 logger.info(
-                    "Fetching price calendar %s -> %s  (dates %s..%s)",
-                    origin, destination,
-                    params["fromDate"], params["toDate"],
+                    "Got %d price-graph entries for %s -> %s (far)",
+                    len(far_prices), origin, destination,
                 )
-
-                try:
-                    response = client.get(
-                        API_URL, headers=headers, params=params
-                    )
-                    if response.status_code != 200:
-                        self._handle_http_error(
-                            response.raise_for_status(), route_str
-                        )
-                    body = response.json()
-                except SourceUnavailableError:
-                    raise
-                except httpx.HTTPStatusError as exc:
-                    self._handle_http_error(exc, route_str)
-                except httpx.RequestError as exc:
-                    logger.error(
-                        "Network error for route %s: %s", route_str, exc
-                    )
-                    raise SourceUnavailableError(
-                        self.source_name, f"network_error: {exc}"
-                    ) from exc
-                except Exception as exc:
-                    logger.error(
-                        "Unexpected error for route %s: %s", route_str, exc
-                    )
-                    raise SourceUnavailableError(
-                        self.source_name, f"HTTP {getattr(exc, 'response', None) and exc.response.status_code or 'unknown'}"
-                    ) from exc
-
-                flights = body.get("flights") or body.get("data") or []
-                if isinstance(flights, dict):
-                    flights = list(flights.values())
-
-                logger.info(
-                    "Got %d flight-day entries for %s -> %s",
-                    len(flights), origin, destination,
-                )
-
-                for item in flights:
+                for item in far_prices:
                     try:
                         row = self._parse_flight_day(
                             item, origin, destination,
                             request.as_of, valid_dates,
                         )
                         if row is not None:
-                            all_rows.append(row)
-                    except Exception as exc:
+                            rows.append(row)
+                    except Exception as exc:  # noqa: BLE001
                         logger.warning(
-                            "Failed to parse flight-day entry %s: %s",
+                            "Failed to parse price-graph entry %s: %s",
                             item, exc,
                         )
+
+                collected = {r["travel_date"].isoformat() for r in rows}
+                missing = sorted(valid_dates - collected)
+                if missing:
+                    # Provider returned a sparse near-day graph; issue a
+                    # second, nearer centre call to backfill missing windows.
+                    logger.info(
+                        "Backfilling missing windows for %s -> %s: %s",
+                        origin, destination, missing,
+                    )
+                    near_prices = _fetch_prices(near_center, route_str,
+                                                origin, destination)
+                    for item in near_prices:
+                        try:
+                            row = self._parse_flight_day(
+                                item, origin, destination,
+                                request.as_of, valid_dates,
+                            )
+                            if row is not None and \
+                                    row["travel_date"].isoformat() in missing:
+                                rows.append(row)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "Failed to parse backfill entry %s: %s",
+                                item, exc,
+                            )
+
+                all_rows.extend(rows)
 
                 if idx < len(request.routes) - 1:
                     time.sleep(0.5)

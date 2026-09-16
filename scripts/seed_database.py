@@ -141,7 +141,24 @@ def seed():
                 {k: r[k] for k in r if k in FareObservation.__table__.columns.keys()}
                 for r in rows
             ])
-            db.bulk_insert_mappings(FareObservation, cleaned_rows)
+            # records_json_safe serialises dates/timestamps to ISO strings,
+            # which PostgreSQL coerces back on insert but SQLite's strict
+            # Date/DateTime column types do not. Coerce explicitly so the
+            # seed works against both database dialects.
+            from datetime import datetime as _datetime
+            coerced_rows = []
+            for r in cleaned_rows:
+                r = dict(r)
+                td = r.get("travel_date")
+                if isinstance(td, str):
+                    r["travel_date"] = date.fromisoformat(td[:10])
+                ts = r.get("collection_timestamp")
+                if isinstance(ts, str):
+                    r["collection_timestamp"] = _datetime.fromisoformat(
+                        ts.replace("Z", "+00:00")
+                    )
+                coerced_rows.append(r)
+            db.bulk_insert_mappings(FareObservation, coerced_rows)
             db.commit()
             print(f"Seeded {len(rows)} fare observations ({report.as_dict()}).")
         else:

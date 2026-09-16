@@ -96,7 +96,7 @@ def latest_fares(origin: str | None = None,
         & (FareObservation.airline == latest_snapshot.c.airline)
         & (FareObservation.travel_date == latest_snapshot.c.travel_date)
         & (FareObservation.collection_timestamp == latest_snapshot.c.latest_collected),
-    ).all()
+    ).order_by(FareObservation.collection_timestamp.desc()).all()
 
     return [
         {

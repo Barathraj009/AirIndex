@@ -24,9 +24,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import engine, SessionLocal
 from app.models.index import IndexRun, IndexConfigModel
-from app.models.reference import Route
 from app.services.index_engine import IndexConfig, compute_index
-from app.api.query_helpers import load_observations_df
+from app.api.query_helpers import active_route_weights, load_observations_df
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +52,7 @@ def _compute_latest_index(db: Session) -> tuple[float, str, str | None]:
         return 0.0, "N/A", "N/A"
 
     period_label = sorted(df["travel_date"].str[:7].unique())[-1]
-    route_weights = {r.route_key: r.weight for r in db.query(Route).filter(Route.active == True).all()}
+    route_weights = active_route_weights(db)
     ice_config = IndexConfig(
         base_period=config.base_period,
         route_weights=route_weights,

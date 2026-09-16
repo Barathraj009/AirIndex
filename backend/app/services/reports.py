@@ -27,8 +27,7 @@ from reportlab.lib.units import inch
 from app.services.index_engine import IndexResult, IndexConfig, compute_index
 from app.core.database import engine, SessionLocal
 from app.models import Base
-from app.api.query_helpers import load_observations_df
-from app.models.reference import Route
+from app.api.query_helpers import active_route_weights, load_observations_df
 from app.models.index import IndexConfigModel
 
 
@@ -53,7 +52,7 @@ def export_index(formats: list[str] | None = None) -> dict[str, bytes]:
         if df.empty:
             raise ValueError("No observation data found.")
 
-        route_weights = {r.route_key: r.weight for r in db.query(Route).filter(Route.active == True).all()}  # noqa: E712
+        route_weights = active_route_weights(db)
         active = db.query(IndexConfigModel).filter(IndexConfigModel.is_active == True).first()  # noqa: E712
         base_period = active.base_period if active else None
         if base_period is None:

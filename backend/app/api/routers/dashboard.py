@@ -3,10 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.deps import require_permission
-from app.api.query_helpers import load_observations_df
+from app.api.query_helpers import active_route_weights, load_observations_df
 from app.services.data_processing import run_pipeline
 from app.services.index_engine import IndexConfig, compute_index
-from app.models.reference import Route
 from app.models.index import IndexConfigModel
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -14,8 +13,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 @router.get("/summary")
 def dashboard_summary(db: Session = Depends(get_db), _=Depends(require_permission("view_dashboard"))):
-    routes = db.query(Route).filter(Route.active == True).all()  # noqa: E712
-    route_weights = {r.route_key: r.weight for r in routes}
+    route_weights = active_route_weights(db)
 
     active_config = db.query(IndexConfigModel).filter(IndexConfigModel.is_active == True).first()  # noqa: E712
     base_period = active_config.base_period if active_config else None

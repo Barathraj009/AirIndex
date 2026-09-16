@@ -7,7 +7,14 @@ environment."""
 
 from functools import lru_cache
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Make .env values visible to plain os.environ lookups too: some live
+# adapters (gds_adapter, kiwi_adapter) read API keys via os.getenv rather
+# than through pydantic-settings, and without this their .env keys never
+# reach the process.
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -32,6 +39,12 @@ class Settings(BaseSettings):
 
     scraper_user_agent: str = "AirIndexIndiaBot/1.0"
     scraper_min_delay_seconds: float = 5.0
+
+    # RapidAPI key for the Google Flights fare adapter (gds_adapter).
+    rapidapi_key: str = ""
+    # google-flights8 returns calendar prices in USD only; the live adapter
+    # converts to INR at this reference rate before storing observations.
+    fx_rate_usd_inr: float = 90.0
 
     @property
     def cors_origins_list(self) -> list[str]:

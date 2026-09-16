@@ -119,10 +119,15 @@ def collect_from_sources(db: Session, source_names: list[str] | None = None,
                 {**{k: r[k] for k in r if k in FareObservation.__table__.columns.keys()},
                  "ingestion_run_id": run.id} for r in rows
             ])
-            inserted = db.execute(
-                pg_insert(FareObservation).values(payload)
-                .on_conflict_do_nothing(index_elements=[FareObservation.__table__.c.observation_id])
-            ).rowcount
+            dialect = db.get_bind().dialect.name
+            if dialect == "postgresql":
+                ins = pg_insert(FareObservation).values(payload).on_conflict_do_nothing(
+                    index_elements=[FareObservation.observation_id])
+            else:
+                from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+                ins = sqlite_insert(FareObservation).values(payload).on_conflict_do_nothing(
+                    index_elements=[FareObservation.observation_id])
+            inserted = db.execute(ins).rowcount
 
             source.last_success_at = datetime.now(timezone.utc)
             run.status = "SUCCESS"
