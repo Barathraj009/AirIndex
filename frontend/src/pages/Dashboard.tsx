@@ -34,19 +34,32 @@ export default function Dashboard() {
   const minFare = withFares.length ? Math.min(...withFares.map((r) => r.min_fare ?? Infinity)) : null
   const maxFare = withFares.length ? Math.max(...withFares.map((r) => r.max_fare ?? 0)) : null
 
-  const fareTrend = latestRows
-    .filter((f) => f.total_fare !== null)
-    .slice()
-    .sort((a, b) => a.travel_date.localeCompare(b.travel_date))
-    .map((f, i) => ({
-      label: `${ROUTE_LABELS[`${f.origin}-${f.destination}`] ?? `${f.origin}-${f.destination}`}`,
-      date: f.travel_date,
-      fare: f.total_fare!,
-      idx: i,
+  // Snapshot collection date (when the fares were pulled from Google Flights).
+  const collectionDate = latestRows.length
+    ? latestRows
+        .map((f) => f.collection_timestamp?.slice(0, 10))
+        .sort()
+        .reverse()[0]
+    : null
+
+  // Group observations by departure date: show avg fare per date + count.
+  const byDateMap = new Map<string, { date: string; fares: number[]; routes: Set<string> }>()
+  for (const f of latestRows) {
+    if (f.total_fare === null) continue
+    const key = f.travel_date
+    if (!byDateMap.has(key)) byDateMap.set(key, { date: key, fares: [], routes: new Set() })
+    const g = byDateMap.get(key)!
+    g.fares.push(f.total_fare)
+    g.routes.add(`${f.origin}-${f.destination}`)
+  }
+  const fareByDate = Array.from(byDateMap.values())
+    .map((g) => ({
+      date: g.date,
+      avg_fare: Math.round(g.fares.reduce((a, b) => a + b, 0) / g.fares.length),
+      n: g.fares.length,
+      routes: ROUTE_LABELS[[...g.routes][0]] ?? [...g.routes][0],
     }))
-    .reverse()
-    .slice(0, 12)
-    .reverse()
+    .sort((a, b) => a.date.localeCompare(b.date))
 
   const buildRoute = withFares
     .map((r) => ({
@@ -75,6 +88,7 @@ export default function Dashboard() {
 
   const indexVal = current.data?.airfare_index ?? null
   const baseYear = current.data?.base_year ?? 2024
+  const indexPeriod = current.data?.period ?? null
 
   return (
     <div className="space-y-6">
@@ -98,9 +112,14 @@ export default function Dashboard() {
               <span className="text-5xl font-bold tracking-tight text-brand-700 tabular-nums">
                 {avgFare !== null ? `₹${avgFare.toFixed(0)}` : '—'}
               </span>
-              <span className="text-sm font-medium text-muted">avg round-trip fare · 6 routes</span>
+              <span className="text-sm font-medium text-muted">avg one-way fare · {withFares.length} routes</span>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+              {collectionDate && (
+                <span className="inline-flex items-center gap-1">
+                  <CalendarDays size={12} /> Collected {collectionDate}
+                </span>
+              )}
               {minFare !== null && (
                 <span className="inline-flex items-center gap-1">
                   <TrendingUp size={12} /> Min <span className="font-semibold text-emerald-600">₹{minFare.toFixed(0)}</span>
@@ -111,11 +130,9 @@ export default function Dashboard() {
                   <TrendingUp size={12} /> Max <span className="font-semibold text-rose-600">₹{maxFare.toFixed(0)}</span>
                 </span>
               )}
-              {indexVal !== null && (
-                <span className="inline-flex items-center gap-1">
-                  <CalendarDays size={12} /> Index {indexVal.toFixed(1)} <TrendPill value={momPct} />
-                </span>
-              )}
+            </div>
+            <div className="mt-1 text-[11px] text-slate-400">
+              Min/Max = cheapest and most expensive one-way fare in this snapshot.
             </div>
           </div>
         </div>
@@ -133,13 +150,13 @@ export default function Dashboard() {
         <StatCard
           label="Average Fare"
           value={avgFare !== null ? `₹${avgFare.toFixed(0)}` : '—'}
-          sub="Across all tracked routes (INR)"
+          sub="One-way avg across routes (INR)"
           icon={<Plane size={18} />}
         />
         <StatCard
           label="Airfare Index"
           value={indexVal !== null ? indexVal.toFixed(1) : '—'}
-          sub={`Official CPI anchor · base ${baseYear}=100`}
+          sub={`Official CPI · period ${indexPeriod ?? '—'} · base ${baseYear}=100`}
           icon={<TrendingUp size={18} />}
         />
       </div>
@@ -150,7 +167,7 @@ export default function Dashboard() {
           title="Average Fares by Route"
           action={
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted">Google Flights · INR</span>
+              <span className="text-[11px] text-muted">Google Flights · one-way INR</span>
               <button
                 onClick={() => chartRef.current && exportChartAsPNG(chartRef.current, 'fares-by-route.png')}
                 title="Download as PNG"
@@ -175,7 +192,7 @@ export default function Dashboard() {
           }
         >
           <p className="pb-3 text-xs text-muted">
-            Average one-way fare per route collected from Google Flights.
+            Average one-way fare per route collected from Google Flights. Longer bar = more expensive route.
           </p>
           <div ref={chartRef}>
             <ResponsiveContainer width="100%" height={340}>
@@ -200,15 +217,15 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Secondary chart: fare spread over travel dates */}
-      {fareTrend.length > 1 && (
+      {/* Secondary chart: fares by departure date (future dates are normal) */}
+      {fareByDate.length > 1 && (
         <Card
-          title="Fares over Time"
+          title="Fares by Departure Date"
           action={
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted">by travel date</span>
+              <span className="text-[11px] text-muted">avg fare per departure date</span>
               <button
-                onClick={() => chartRef2.current && exportChartAsPNG(chartRef2.current, 'fares-over-time.png')}
+                onClick={() => chartRef2.current && exportChartAsPNG(chartRef2.current, 'fares-by-departure.png')}
                 title="Download as PNG"
                 className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-700 hover:border-brand-500/40 transition-colors"
               >
@@ -217,9 +234,9 @@ export default function Dashboard() {
               <button
                 onClick={() =>
                   downloadCSV(
-                    'fares-over-time.csv',
-                    ['Travel date', 'Route', 'Fare (INR)'],
-                    fareTrend.map((p) => [p.date, p.label, p.fare])
+                    'fares-by-departure.csv',
+                    ['Departure date', 'Avg Fare', '# fares', 'Route'],
+                    fareByDate.map((p) => [p.date, p.avg_fare, p.n, p.routes])
                   )
                 }
                 title="Download as CSV"
@@ -231,27 +248,24 @@ export default function Dashboard() {
           }
         >
           <p className="pb-3 text-xs text-muted">
-            Currently booked fares plotted against their travel dates.
+            {collectionDate
+              ? `Fares booked ${collectionDate} for flights leaving on these future dates — the earlier you book, the cheaper it usually is.`
+              : 'Each bar is the average fare for a flight departing on that date.'}
           </p>
           <div ref={chartRef2}>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={fareTrend} margin={{ top: 8, right: 12, bottom: 40, left: 0 }}>
-                <defs>
-                  <linearGradient id="gradFare" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1471e8" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="#1471e8" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <BarChart data={fareByDate} margin={{ top: 8, right: 12, bottom: 40, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="date" tickLine={false} axisLine={false} angle={-15} textAnchor="end" interval={0} height={60} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v}`} domain={['auto', 'auto']} />
                 <Tooltip
                   contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12 }}
                   labelStyle={{ color: '#0f172a', fontWeight: 600 }}
-                  formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Fare']}
+                  formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Avg fare']}
                 />
-                <Area type="monotone" dataKey="fare" name="Fare (INR)" stroke="#1471e8" strokeWidth={2.5} fill="url(#gradFare)" dot={{ r: 3, fill: '#1471e8' }} activeDot={{ r: 4 }} />
-              </AreaChart>
+                <Legend />
+                <Bar dataKey="avg_fare" name="Avg fare (INR)" radius={[6, 6, 0, 0]} fill="#0ea5e9" />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
@@ -261,7 +275,9 @@ export default function Dashboard() {
       {(trend.data?.series ?? []).length > 0 && (
         <Card title="Official Airfare CPI">
           <p className="pb-3 text-xs text-muted">
-            MoSPI airfare CPI (07.3.3.1, base {baseYear}=100) — official anchor for the index.
+            Government-published MoSPI airfare CPI (code 07.3.3.1, base {baseYear}=100). This is the official
+            price index — independent from the Google Flights rupee fares above.
+            Shows how 'expensive' air travel is vs. the 2024 average.
           </p>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={trend.data!.series} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
