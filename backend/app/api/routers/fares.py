@@ -123,14 +123,14 @@ def route_summaries(db: Session = Depends(get_db),
                     _=Depends(require_permission("view_dashboard"))):
     """Per-route fare summary for the Dashboard route basket — count,
     valid count, median/min/max fare, and the freshest collection time."""
-    from sqlalchemy import func
+    from sqlalchemy import func, case
 
     rows = (
         db.query(
             FareObservation.origin.label("origin"),
             FareObservation.destination.label("destination"),
             func.count(FareObservation.id).label("n"),
-            func.sum(func.case((FareObservation.data_quality_status == "VALID", 1), else_=0)).label("n_valid"),
+            func.sum(case((FareObservation.data_quality_status == "VALID", 1), else_=0)).label("n_valid"),
             func.avg(FareObservation.total_fare).label("avg_fare"),
             func.min(FareObservation.total_fare).label("min_fare"),
             func.max(FareObservation.total_fare).label("max_fare"),

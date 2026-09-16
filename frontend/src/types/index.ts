@@ -229,11 +229,21 @@ export interface CpiForecastResult {
 }
 
 export interface SourceStatusItem {
-  name: string
+  source_name: string
   label: string
-  active: boolean
+  category: string
+  status: 'LIVE' | 'STALE' | 'UNAVAILABLE'
   last_success_at: string | null
   last_failure_reason: string | null
+  last_run_at: string | null
+  last_run_status: string | null
+  detail: string
+}
+
+export interface SourcesResponse {
+  sources: SourceStatusItem[]
+  summary: { total: number; by_status: Record<string, number> }
+  as_of: string
 }
 
 export interface LatestFare {

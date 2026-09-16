@@ -230,6 +230,32 @@ class APIIntegrationTests(unittest.TestCase):
             self.assertEqual(rows[0]["origin"], "DEL")
             self.assertEqual(rows[0]["destination"], "BOM")
 
+    def test_fares_routes_summarized(self):
+        token = self._login()["access_token"]
+        r = client.get("/api/fares/routes", headers=self._auth(token))
+        self.assertEqual(r.status_code, 200, r.text)
+        rows = r.json()
+        self.assertIsInstance(rows, list)
+        self.assertGreater(len(rows), 0)
+        for row in rows:
+            for key in ("route", "origin", "destination", "n", "n_valid",
+                        "avg_fare", "min_fare", "max_fare", "latest_collected"):
+                self.assertIn(key, row)
+            self.assertGreaterEqual(row["n_valid"], 1)
+            self.assertIsNotNone(row["avg_fare"])
+
+    def test_fares_latest_returns_observations(self):
+        token = self._login()["access_token"]
+        r = client.get("/api/fares/latest", headers=self._auth(token))
+        self.assertEqual(r.status_code, 200, r.text)
+        rows = r.json()
+        self.assertIsInstance(rows, list)
+        self.assertGreater(len(rows), 0)
+        for row in rows[:5]:
+            for key in ("origin", "destination", "travel_date", "total_fare",
+                        "source", "source_type"):
+                self.assertIn(key, row)
+
     # ---- sources (two-source monitor, replaces scrapers monitor) ----
 
     def test_sources_lists_the_two_real_sources(self):

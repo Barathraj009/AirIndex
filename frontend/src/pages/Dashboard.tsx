@@ -18,8 +18,8 @@ const ROUTE_LABELS: Record<string, string> = {
 const BAR_COLORS = ['#1471e8', '#0ea5e9', '#6366f1', '#06b6d4', '#3b82f6', '#0284c7']
 
 export default function Dashboard() {
-  const routes = useApiQuery<RouteFareSummary[]>('/api/fares/routes')
-  const latest = useApiQuery<LatestFare[]>('/api/fares/latest')
+  const routes = useApiQuery<RouteFareSummary[]>('/fares/routes')
+  const latest = useApiQuery<LatestFare[]>('/fares/latest')
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
   const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=24')
   const chartRef = useRef<HTMLDivElement>(null)

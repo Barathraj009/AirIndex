@@ -3,7 +3,7 @@ import { useApiQuery } from '../hooks/useApiQuery'
 import { api } from '../api/client'
 import { PageHeader, Card, LoadingState, ErrorState } from '../components/ui'
 import { TabBar } from '../components/Tabs'
-import type { Route, AuditLogRow, UserItem, IndexConfigItem, SourceStatusItem } from '../types'
+import type { Route, AuditLogRow, UserItem, IndexConfigItem, SourceStatusItem, SourcesResponse } from '../types'
 
 type AdminTab = 'routes' | 'users' | 'config' | 'sources'
 
@@ -395,13 +395,17 @@ function ConfigTab() {
 
 const statusBadgeCls: Record<string, string> = {
   LIVE: 'bg-emerald-500/10 text-emerald-700',
+  STALE: 'bg-amber-500/10 text-amber-700',
   UNAVAILABLE: 'bg-rose-500/10 text-rose-700',
 }
 
 function SourcesTab() {
-  const sourcesQuery = useApiQuery<SourceStatusItem[]>('/api/sources')
+  const sourcesQuery = useApiQuery<SourcesResponse>('/sources')
 
   const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '\u2014')
+
+  const badge = (status: SourceStatusItem['status']) =>
+    statusBadgeCls[status === 'LIVE' ? 'LIVE' : status === 'STALE' ? 'STALE' : 'UNAVAILABLE']
 
   return (
     <Card title="Data Sources">
@@ -412,15 +416,15 @@ function SourcesTab() {
       {sourcesQuery.error && <ErrorState message={sourcesQuery.error} onRetry={sourcesQuery.refetch} />}
       {sourcesQuery.data && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {sourcesQuery.data.map((s) => (
-            <div key={s.name} className="rounded-xl border border-line bg-white p-4">
+          {sourcesQuery.data.sources.map((s) => (
+            <div key={s.source_name} className="rounded-xl border border-line bg-white p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-ink">{s.label}</div>
-                  <div className="font-mono text-[11px] text-muted">{s.name}</div>
+                  <div className="font-mono text-[11px] text-muted">{s.source_name}</div>
                 </div>
-                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeCls[s.active ? 'LIVE' : 'UNAVAILABLE']}`}>
-                  {s.active ? 'LIVE' : 'UNAVAILABLE'}
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${badge(s.status)}`}>
+                  {s.status}
                 </span>
               </div>
               <div className="mt-3 space-y-1 text-xs text-muted">
