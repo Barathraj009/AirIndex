@@ -35,7 +35,12 @@ class Settings(BaseSettings):
 
     api_rate_limit_per_minute: int = 120
 
-    ingestion_schedule_cron: str = "0 */6 * * *"
+    # Cadence for the scheduled ingestion job (all active sources).
+    # The Google Flights feed makes one RapidAPI request per active route
+    # per run, so with the default 6-route basket this is ~6 requests/day
+    # (~180/month on the Basic $0 plan). Override with
+    # INGESTION_SCHEDULE_CRON (e.g. "0 6 * * 1" weekly) to fit a quota.
+    ingestion_schedule_cron: str = "0 6 * * *"
 
     scraper_user_agent: str = "AirIndexIndiaBot/1.0"
     scraper_min_delay_seconds: float = 5.0

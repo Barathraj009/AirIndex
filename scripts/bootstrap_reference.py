@@ -53,6 +53,10 @@ ROUTE_BASKET = {
 
 DATA_SOURCES = [
     ("MOSPI_CPI", "PUBLIC_DATASET"),
+    # Licensed live fare feed (Google Flights via RapidAPI, gds_adapter).
+    # Seeded so the scheduled/manual ingestion can collect real fares in
+    # production; requires RAPIDAPI_KEY in the environment.
+    ("GOOGLE_FLIGHTS_API", "LIVE_SCRAPE"),
 ]
 
 

@@ -20,9 +20,10 @@ function ScraperStatusStrip() {
     CLEARTRIP_WEB: 'Cleartrip', IXIGO_WEB: 'ixigo', GOIBIBO_WEB: 'Goibibo',
     INDIGO_WEB: 'IndiGo', AIR_INDIA_WEB: 'Air India', AIR_INDIA_EXPRESS_WEB: 'AI Express',
     AKASA_WEB: 'Akasa', SPICEJET_WEB: 'SpiceJet',
+    GOOGLE_FLIGHTS_API: 'Google Flights',
   }
 
-  const pill = (s: ScraperStatusSummary['sources'][number]) => {
+  const pill = (s: { source_name: string; status: string; label: string }) => {
     const liveCls =
       s.status === 'LIVE' ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
       : s.status === 'DEMO' ? 'bg-amber-500/10 text-amber-700 border-amber-500/30'
@@ -47,9 +48,14 @@ function ScraperStatusStrip() {
       }
     >
       <p className="pb-3 text-xs text-muted">
-        Compliance status of the airline and OTA scrapers. UNAVAILABLE = no compliant live path
-        (robots.txt / Terms); never scraped around.
+        Licensed Google Flights feed (RapidAPI) plus compliance status of the airline and OTA
+        scrapers. UNAVAILABLE = no compliant live path (robots.txt / Terms); never scraped around.
       </p>
+      <p className="pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">Live feed</p>
+      <div className="flex flex-wrap gap-2">
+        {(status.data.live_feeds ?? []).map(pill)}
+      </div>
+      <p className="pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted">Web scrapers</p>
       <div className="flex flex-wrap gap-2">
         {byStatus.LIVE.map(pill)}
         {byStatus.DEMO.map(pill)}

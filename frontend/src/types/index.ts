@@ -317,8 +317,22 @@ export interface ScraperSource {
   as_of: string
 }
 
+export interface LiveFeedStatus {
+  source_name: string
+  label: string
+  category: string
+  base_url: string
+  status: string
+  reason: string | null
+  last_run_status: string | null
+  last_success_at: string | null
+  last_failure_reason: string | null
+  as_of: string
+}
+
 export interface ScraperStatusSummary {
   sources: ScraperSource[]
+  live_feeds: LiveFeedStatus[]
   summary: {
     total: number
     by_status: Record<ScraperSourceStatus, number>

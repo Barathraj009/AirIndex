@@ -22,6 +22,44 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# DataSource name of the licensed (RapidAPI) Google Flights fare feed — the
+# platform's only real-time live source. Surfaced separately from the
+# crawler registry because it is an API feed, not a scraped website.
+LIVE_FEED_SOURCE_NAME = "GOOGLE_FLIGHTS_API"
+
+
+def live_feed_status_payload(db: Session) -> dict | None:
+    """Status payload for the licensed Google Flights feed (single exit point
+    for the Scraper Monitor / Dashboard strip). Mirrors crawl sources but is
+    computed purely from the data_sources row + last ingestion run."""
+    from app.models.reference import DataSource
+
+    ds = db.query(DataSource).filter(DataSource.name == LIVE_FEED_SOURCE_NAME).first()
+    if ds is None:
+        return None
+
+    if ds.last_failure_reason:
+        status, reason = "UNAVAILABLE", ds.last_failure_reason
+    elif ds.last_success_at:
+        status, reason = "LIVE", None
+    else:
+        status, reason = "UNAVAILABLE", "Feed configured but no successful collection yet"
+
+    return {
+        "source_name": LIVE_FEED_SOURCE_NAME,
+        "label": "Google Flights (RapidAPI)",
+        "category": "FEED",
+        "base_url": "https://google-flights8.p.rapidapi.com",
+        "status": status,
+        "reason": reason,
+        "last_run_status": "SUCCESS" if ds.last_success_at else
+        ("FAILED" if ds.last_failure_reason else "NEVER_RUN"),
+        "last_success_at": ds.last_success_at.isoformat() if ds.last_success_at else None,
+        "last_failure_reason": ds.last_failure_reason,
+        "as_of": _utcnow_iso(),
+    }
+
+
 def source_status_payload(spec: ScraperSpec, db: Session, rows: dict,
                           robots: RobotsVerdict | None = None) -> dict:
     last_run = rows.get(spec.source_name, {})
@@ -98,5 +136,6 @@ def build_status_summary(specs: list[ScraperSpec], db: Session,
             "by_status": {k: counts.get(k, 0) for k in (SourceStatus.LIVE, SourceStatus.DEMO,
                                                         SourceStatus.MOCK, SourceStatus.UNAVAILABLE)},
         },
+        "live_feeds": [p for p in (live_feed_status_payload(db),) if p is not None],
         "as_of": _utcnow_iso(),
     }

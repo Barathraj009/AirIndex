@@ -16,6 +16,8 @@ services:
         sync: false
       - key: KIWI_API_KEY
         sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
       - key: SEED_ADMIN_EMAIL
         sync: false
       - key: SEED_ADMIN_PASSWORD
@@ -26,6 +28,10 @@ services:
         value: https://airindex-frontend.onrender.com
       - key: PYTHONPATH
         value: /app/backend:/app
+      - key: INGESTION_SCHEDULE_CRON
+        value: 0 6 * * *
+      - key: FX_RATE_USD_INR
+        value: 90.0
     healthCheckPath: /api/health
 
   - type: web

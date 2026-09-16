@@ -17,6 +17,14 @@ Today **all 11 sources are `UNAVAILABLE`** — documented per source in
 [source-status.md](source-status.md) and backed by live robots.txt
 findings (2026-09) in [ROBOTS_TXT_FINDINGS.md](ROBOTS_TXT_FINDINGS.md).
 
+> **Licensed live feed (outside the compliance gate):** the platform's
+> real-time fares come from the licensed RapidAPI Google Flights feed
+> (`ingestion/adapters/gds_adapter.py`, source `GOOGLE_FLIGHTS_API`) —
+> a paid API, not a crawled site, so it is exempt from these robots.txt
+> rules and is surfaced separately in the Dashboard as the **Live feed**
+> pill. The 11 web scrapers remain the compliance-fail-closed framework
+> for any future partner/affiliate API (`_collect_compliant`).
+
 ## Layering
 
 ```
