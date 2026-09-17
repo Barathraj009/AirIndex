@@ -83,23 +83,99 @@ def bootstrap():
             db.commit()
             print(f"Seeded admin user ({admin_email}, ADMIN).")
 
+        _load_google_flights_replay(db)
+        _load_mospi_cpi_replay(db)
+
         if db.query(IndexConfigModel).filter(IndexConfigModel.is_active == True).first() is None:  # noqa: E712
+            observed = _observed_base_period(db)
             db.add(IndexConfigModel(
-                base_period="2026-01",
+                base_period=observed or "2026-01",
                 methodology_version=METHODOLOGY_VERSION,
                 is_active=True,
                 created_by="bootstrap_reference.py",
             ))
-            db.commit()
-            print("Seeded active index config (base_period=2026-01).")
+            print(f"Seeded active index config (base_period={observed or '2026-01'}).")
 
-        _load_google_flights_replay(db)
-        _load_mospi_cpi_replay(db)
+        _reconcile_legacy_basket(db)
+        _reconcile_config_base_period(db)
 
         db.commit()
         print("Bootstrap complete.")
     finally:
         db.close()
+
+
+def _observed_base_period(db) -> str | None:
+    """Earliest period that has fare observations — the base period must be a
+    period where real data exists, otherwise the index cannot be computed."""
+    from app.models.observations import FareObservation
+    from sqlalchemy import func
+
+    row = (
+        db.query(func.min(FareObservation.travel_date))
+        .filter(FareObservation.data_quality_status.in_(["VALID", "SUSPICIOUS"]))
+        .scalar()
+    )
+    if row is None:
+        return None
+    return row.strftime("%Y-%m")
+
+
+# The legacy basket baked into databases seeded before canonical unification.
+# Fingerprint match is required (exact routes + weights + tiers) so we never
+# overwrite a basket an admin has intentionally customized.
+_LEGACY_BASKET = {
+    "DEL-BOM": (0.13, "MEDIUM"),
+    "DEL-BLR": (0.11, "MEDIUM"),
+    "BOM-BLR": (0.09, "MEDIUM"),
+    "DEL-CCU": (0.08, "SHORT"),
+    "DEL-HYD": (0.09, "SHORT"),
+    "BLR-HYD": (0.07, "SHORT"),
+    "DEL-MAA": (0.08, "MEDIUM"),
+    "BOM-MAA": (0.07, "MEDIUM"),
+    "DEL-GOI": (0.05, "MEDIUM"),
+    "BOM-GOI": (0.04, "MEDIUM"),
+    "BLR-CCU": (0.04, "LONG"),
+    "DEL-TRV": (0.04, "LONG"),
+    "BOM-HYD": (0.03, "SHORT"),
+    "DEL-PNQ": (0.02, "SHORT"),
+    "BLR-MAA": (0.02, "SHORT"),
+    "BOM-CCU": (0.02, "LONG"),
+}
+
+
+def _reconcile_legacy_basket(db) -> None:
+    """One-time migration: replace the legacy basket (sum 0.98, MEDIUM/SHORT/
+    LONG tiers) with the canonical basket when the DB still holds an exact
+    legacy fingerprint. Does nothing if routes were customized."""
+    from app.models import Route
+
+    db_routes = {
+        f"{r.origin}-{r.destination}": (round(r.weight, 4), (r.distance_tier or "").upper())
+        for r in db.query(Route).all()
+    }
+    expected = {k: v for k, v in _LEGACY_BASKET.items()}
+    if db_routes != expected:
+        return
+    db.query(Route).delete()
+    for route, (weight, tier) in ROUTE_BASKET.items():
+        origin, dest = route.split("-")
+        db.add(Route(origin=origin, destination=dest, weight=weight, distance_tier=tier))
+    print("Reconciled legacy route basket -> canonical basket (sum 1.00).")
+
+
+def _reconcile_config_base_period(db) -> None:
+    """One-time migration: fix a bootstrap hardcoded base_period (2026-01)
+    that predates any fare data. Re-base to the first observed period."""
+    from app.models.index import IndexConfigModel
+
+    active = db.query(IndexConfigModel).filter(IndexConfigModel.is_active == True).first()  # noqa: E712
+    observed = _observed_base_period(db)
+    if active is None or observed is None:
+        return
+    if active.base_period == "2026-01" and active.base_period != observed:
+        active.base_period = observed
+        print(f"Reconciled config base_period: 2026-01 -> {observed}.")
 
 
 def _load_google_flights_replay(db):

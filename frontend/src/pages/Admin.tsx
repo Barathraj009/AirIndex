@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { api } from '../api/client'
 import { PageHeader, Card, LoadingState, ErrorState } from '../components/ui'
@@ -282,11 +282,18 @@ function ConfigTab() {
   const configHistoryQuery = useApiQuery<IndexConfigItem[]>('/index/config/history')
   const auditQuery = useApiQuery<AuditLogRow[]>('/admin/audit-log')
   const [showNewConfig, setShowNewConfig] = useState(false)
-  const [configBasePeriod, setConfigBasePeriod] = useState('2026-01')
+  const [configBasePeriod, setConfigBasePeriod] = useState('')
   const [configIncludeSuspicious, setConfigIncludeSuspicious] = useState(false)
   const [configNotes, setConfigNotes] = useState('')
   const [configError, setConfigError] = useState<string | null>(null)
   const [configSuccess, setConfigSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (configBasePeriod === '' && activeConfigQuery.data?.base_period) {
+      setConfigBasePeriod(activeConfigQuery.data.base_period)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConfigQuery.data])
 
   const handleCreateConfig = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -322,6 +329,9 @@ function ConfigTab() {
 
       {showNewConfig && (
         <form onSubmit={handleCreateConfig} className="mb-6 rounded-xl border border-line bg-white p-4 text-sm">
+          {configBasePeriod === '' && (
+            <p className="mb-3 text-xs text-amber-700">Choose a base period (a month with fare data).</p>
+          )}
           <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
             <label className="flex flex-col gap-1.5">
               <span className="text-xs text-muted">Base Period (YYYY-MM)</span>

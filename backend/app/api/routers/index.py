@@ -132,12 +132,8 @@ def get_index_forecast(steps: int = 3, db: Session = Depends(get_db), _=Depends(
     if len(periods) >= 2:
         series = compute_index_series(df, config, periods)
     else:
-        # Fallback benchmark series for forecast demonstration
-        series = [
-            {"period": "2026-01", "index_value": 100.0},
-            {"period": "2026-02", "index_value": 102.4},
-            {"period": "2026-03", "index_value": 105.1},
-        ]
+        return {"available": False, "note": "At least 2 periods of index data are needed to forecast.",
+                "forecast_points": []}
 
     return forecast_index_series(series, forecast_steps=steps)
 

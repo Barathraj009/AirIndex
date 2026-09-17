@@ -69,9 +69,7 @@ def build_sources_status(db: Session) -> dict:
     live status of the two product data sources."""
     now = datetime.now(timezone.utc)
 
-    rows = db.query(IngestionRun).all() if False else (
-        db.query(IngestionRun).order_by(IngestionRun.started_at.desc()).all()
-    )
+    rows = db.query(IngestionRun).order_by(IngestionRun.started_at.desc()).all()
     latest_run_by_source: dict[int, IngestionRun] = {}
     for r in rows:
         latest_run_by_source.setdefault(r.data_source_id, r)
@@ -109,6 +107,30 @@ def build_sources_status(db: Session) -> dict:
             detail = label["detail"]
             if status == "LIVE":
                 detail += " Live fare feed — used for APIx."
+            elif status == "UNAVAILABLE":
+                # Distinguish "never collected live" from "real capture data
+                # already loaded (bundled or scheduled)". The dashboard can
+                # show real fares even before the first scheduled run.
+                from app.models.observations import FareObservation
+                from sqlalchemy import func
+
+                n_seeded = (
+                    db.query(func.count(FareObservation.id))
+                    .filter(FareObservation.source == name)
+                    .scalar()
+                ) or 0
+                last_loaded = (
+                    db.query(func.max(FareObservation.collection_timestamp))
+                    .filter(FareObservation.source == name)
+                    .scalar()
+                )
+                if n_seeded and last_loaded:
+                    detail += (
+                        f" {n_seeded} real fare captures loaded from {_iso(last_loaded)[:10]}; "
+                        "live collection has not run yet in the live window."
+                    )
+                else:
+                    detail += " No collection has run yet."
         else:
             # MOSPI_CPI: LIVE whenever any row has been ingested (official
             # history anchor). No per-second freshness window — the schedule
