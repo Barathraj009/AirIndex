@@ -6,9 +6,9 @@ gds_adapter) and the official MoSPI CPI airfare index (07.3.3.1). The CSVs in
 
 * ``google_flights_replay.csv`` — 30 fare observations collected 2026-09-16
   from the licensed Google Flights feed (RapidAPI, google-flights8 price
-  graph), all VALID. Re-captured live on 2026-09-16 (GBP->INR at FX 90.0);
-  the calendar-price endpoint returns a per-day cheapest fare, so airline is
-  reported as MULTI (aggregate) by design.
+  graph), all VALID. Fares are stored in INR (converted from USD at
+  FX_RATE_USD_INR=90.0 during capture); the calendar-price endpoint returns a
+  per-day cheapest fare, so airline is reported as MULTI (aggregate) by design.
 * ``mospi_cpi_replay.csv`` — 32 months (2024-01..2026-08) of the official
   MoSPI airfare CPI series (code 07.3.3.1, base 2024=100) as published by
   api.mospi.gov.in / esankhyiki.mospi.gov.in.
