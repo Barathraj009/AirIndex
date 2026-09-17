@@ -1,8 +1,8 @@
 import { Area, AreaChart, Bar, BarChart, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, Cell } from 'recharts'
 import { Plane, TrendingUp, CalendarDays, MapPin } from 'lucide-react'
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useApiQuery } from '../hooks/useApiQuery'
-import { PageHeader, StatCard, Card, LoadingState, ErrorState, EmptyState, TrendPill } from '../components/ui'
+import { PageHeader, StatCard, Card, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { exportChartAsPNG, downloadCSV } from '../utils/exportChart'
 import type { CpiAirfareIndex, CpiAirfareTrend, RouteFareSummary, LatestFare } from '../types'
 
@@ -30,9 +30,20 @@ function todayInIST(): string {
   return formatter.format(new Date())
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// Compact axis label ("17 Sep", or "17 Sep '27" when the year is not the
+// current one). Parsed manually so a date-only string is never shifted.
+function formatDepartureLabel(iso: string, todayIso: string): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  const label = `${day} ${MONTHS[month - 1] ?? ''}`
+  return iso.slice(0, 4) === todayIso.slice(0, 4) ? label : `${label} '${String(year).slice(2)}`
+}
+
 export default function Dashboard() {
+  const todayStr = useMemo(() => todayInIST(), [])
   const routes = useApiQuery<RouteFareSummary[]>('/fares/routes')
-  const latest = useApiQuery<LatestFare[]>(`/fares/latest?from_date=${todayInIST()}`)
+  const latest = useApiQuery<LatestFare[]>(`/fares/latest?from_date=${todayStr}`)
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
   const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=24')
   const chartRef = useRef<HTMLDivElement>(null)
@@ -44,8 +55,10 @@ export default function Dashboard() {
   const avgFare = withFares.length
     ? withFares.reduce((s, r) => s + (r.avg_fare ?? 0), 0) / withFares.length
     : null
-  const minFare = withFares.length ? Math.min(...withFares.map((r) => r.min_fare ?? Infinity)) : null
-  const maxFare = withFares.length ? Math.max(...withFares.map((r) => r.max_fare ?? 0)) : null
+  const minValues = withFares.map((r) => r.min_fare).filter((v): v is number => v !== null)
+  const maxValues = withFares.map((r) => r.max_fare).filter((v): v is number => v !== null)
+  const minFare = minValues.length ? Math.min(...minValues) : null
+  const maxFare = maxValues.length ? Math.max(...maxValues) : null
 
   // Snapshot collection date (when the fares were pulled from Google Flights).
   const collectionDate = latestRows.length
@@ -55,28 +68,33 @@ export default function Dashboard() {
         .reverse()[0]
     : null
 
-  // Group observations by departure date: show avg fare per date + count.
-  // Only dates on/after today (timezone-safe) are shown; the backend is asked
-  // for the same window via from_date, so no stale fares appear.
-  const todayStr = todayInIST()
-  const byDateMap = new Map<string, { date: string; fares: number[]; routes: Set<string> }>()
+  // Group the latest snapshot by departure date. Only dates on/after today
+  // (timezone-safe) are kept, matching the from_date window requested above.
+  // Each point records how many fares and how many distinct routes it averages
+  // so the chart is never read as a single-route comparison.
+  const byDateMap = new Map<string, { fares: number[]; routes: Set<string> }>()
   for (const f of latestRows) {
     if (f.total_fare === null) continue
     const key = f.travel_date
     if (key < todayStr) continue
-    if (!byDateMap.has(key)) byDateMap.set(key, { date: key, fares: [], routes: new Set() })
+    if (!byDateMap.has(key)) byDateMap.set(key, { fares: [], routes: new Set() })
     const g = byDateMap.get(key)!
     g.fares.push(f.total_fare)
     g.routes.add(`${f.origin}-${f.destination}`)
   }
-  const fareByDate = Array.from(byDateMap.values())
-    .map((g) => ({
-      date: g.date,
+  const fareByDate = Array.from(byDateMap.entries())
+    .map(([date, g]) => ({
+      date,
+      label: formatDepartureLabel(date, todayStr),
       avg_fare: Math.round(g.fares.reduce((a, b) => a + b, 0) / g.fares.length),
       n: g.fares.length,
-      routes: ROUTE_LABELS[[...g.routes][0]] ?? [...g.routes][0],
+      n_routes: g.routes.size,
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
+
+  // Cap the number of visible x-axis labels so a long departure calendar does
+  // not collapse into overlapping text.
+  const dateTickInterval = Math.max(0, Math.ceil(fareByDate.length / 10) - 1)
 
   const buildRoute = withFares
     .map((r) => ({
@@ -88,9 +106,7 @@ export default function Dashboard() {
     }))
     .sort((a, b) => b.avg_fare - a.avg_fare)
 
-  const momPct = useMemoMom(trend.data?.series ?? [], current.data?.period ?? null)
-
-  if (current.loading) return <LoadingState label="Loading fare data..." />
+  if (current.loading || routes.loading || latest.loading) return <LoadingState label="Loading fare data..." />
   if (routes.error && current.error) return <ErrorState message={routes.error} onRetry={routes.refetch} />
   if (avgFare === null && !current.data?.available) {
     return (
@@ -123,13 +139,13 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-brand-600">
               <Plane size={13} />
-              Current Fare Snapshot
+              Average One-Way Fare
             </div>
             <div className="mt-3 flex items-baseline gap-3">
               <span className="text-5xl font-bold tracking-tight text-brand-700 tabular-nums">
                 {avgFare !== null ? `₹${avgFare.toFixed(0)}` : '—'}
               </span>
-              <span className="text-sm font-medium text-muted">avg one-way fare · {withFares.length} routes</span>
+              <span className="text-sm font-medium text-muted">across all captured departures · {withFares.length} routes</span>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
               {collectionDate && (
@@ -149,7 +165,7 @@ export default function Dashboard() {
               )}
             </div>
             <div className="mt-1 text-[11px] text-slate-400">
-              Min/Max = cheapest and most expensive one-way fare in this snapshot.
+              Average, min and max are across every one-way fare captured for the tracked routes (all departure dates).
             </div>
           </div>
         </div>
@@ -167,7 +183,7 @@ export default function Dashboard() {
         <StatCard
           label="Average Fare"
           value={avgFare !== null ? `₹${avgFare.toFixed(0)}` : '—'}
-          sub="One-way avg across routes (INR)"
+          sub="One-way avg across captured departures (INR)"
           icon={<Plane size={18} />}
         />
         <StatCard
@@ -209,7 +225,7 @@ export default function Dashboard() {
           }
         >
           <p className="pb-3 text-xs text-muted">
-            Average one-way fare per route collected from Google Flights. Longer bar = more expensive route.
+            Average one-way fare per route across all captured departure dates. Longer bar = more expensive route.
           </p>
           <div ref={chartRef}>
             <ResponsiveContainer width="100%" height={340}>
@@ -234,13 +250,13 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Secondary chart: fares by departure date (future dates are normal) */}
-      {fareByDate.length > 1 && (
+      {/* Secondary chart: average fare by upcoming departure date */}
+      {fareByDate.length > 0 && (
         <Card
           title="Fares by Departure Date"
           action={
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted">avg fare per departure date</span>
+              <span className="text-[11px] text-muted">upcoming departures · avg fare</span>
               <button
                 onClick={() => chartRef2.current && exportChartAsPNG(chartRef2.current, 'fares-by-departure.png')}
                 title="Download as PNG"
@@ -252,8 +268,8 @@ export default function Dashboard() {
                 onClick={() =>
                   downloadCSV(
                     'fares-by-departure.csv',
-                    ['Departure date', 'Avg Fare', '# fares', 'Route'],
-                    fareByDate.map((p) => [p.date, p.avg_fare, p.n, p.routes])
+                    ['Departure date', 'Avg fare (INR)', '# fares', '# routes'],
+                    fareByDate.map((p) => [p.date, p.avg_fare, p.n, p.n_routes])
                   )
                 }
                 title="Download as CSV"
@@ -265,20 +281,35 @@ export default function Dashboard() {
           }
         >
           <p className="pb-3 text-xs text-muted">
+            Average one-way fare for every departure date from today onward, across the tracked routes.
             {collectionDate
-              ? `Fares booked ${collectionDate} for flights departing from today onward — earlier bookings are usually cheaper.`
-              : 'Each bar is the average fare for a flight departing on or after today.'}
+              ? ` Latest fares were collected ${collectionDate}; later departures are usually cheaper to book now.`
+              : ''}
           </p>
           <div ref={chartRef2}>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={fareByDate} margin={{ top: 8, right: 12, bottom: 40, left: 0 }}>
+              <BarChart data={fareByDate} margin={{ top: 8, right: 12, bottom: 56, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} angle={-15} textAnchor="end" interval={0} height={60} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  angle={-45}
+                  textAnchor="end"
+                  interval={dateTickInterval}
+                  height={64}
+                  tickMargin={8}
+                />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v}`} domain={['auto', 'auto']} />
                 <Tooltip
                   contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12 }}
                   labelStyle={{ color: '#0f172a', fontWeight: 600 }}
-                  formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Avg fare']}
+                  labelFormatter={(label) => `Departure ${label}`}
+                  formatter={(value: number, _name, item) => {
+                    const point = (item as { payload?: (typeof fareByDate)[number] } | undefined)?.payload
+                    const detail = point ? ` · ${point.n} fares · ${point.n_routes} routes` : ''
+                    return [`₹${value.toLocaleString()}${detail}`, 'Average']
+                  }}
                 />
                 <Legend />
                 <Bar dataKey="avg_fare" name="Avg fare (INR)" radius={[6, 6, 0, 0]} fill="#0ea5e9" />
@@ -319,16 +350,6 @@ export default function Dashboard() {
       )}
     </div>
   )
-}
-
-function useMemoMom(trendData: CpiAirfareTrend['series'], currentPeriod: string | null): number | null {
-  if (!currentPeriod || trendData.length < 2) return null
-  const idx = trendData.findIndex((p) => p.period === currentPeriod)
-  if (idx <= 0) return null
-  const prev = trendData[idx - 1].airfare_index
-  const curr = trendData[idx].airfare_index
-  if (!prev) return null
-  return ((curr - prev) / prev) * 100
 }
 
 export type { CpiAirfareIndex, CpiAirfareTrend, RouteFareSummary, LatestFare }
