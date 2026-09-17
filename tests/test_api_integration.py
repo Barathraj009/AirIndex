@@ -256,6 +256,36 @@ class APIIntegrationTests(unittest.TestCase):
                         "source", "source_type"):
                 self.assertIn(key, row)
 
+    def test_fares_latest_filters_dates_and_orders_ascending(self):
+        """from_date must restrict travel dates >= start day."""
+        token = self._login()["access_token"]
+        rows = client.get("/api/fares/latest", headers=self._auth(token)).json()
+        dates = [str(r["travel_date"]) for r in rows]
+        ordered = all(left <= right for left, right in zip(dates, dates[1:]))
+        self.assertTrue(ordered, "rows must be ordered by travel_date ascending")
+
+        cutoff = min(dates)
+        r = client.get(f"/api/fares/latest?from_date={cutoff}", headers=self._auth(token))
+        self.assertEqual(r.status_code, 200, r.text)
+        sub_dates = {str(x["travel_date"]) for x in r.json()}
+        self.assertEqual(sub_dates, set(dates))
+        self.assertTrue(all(d >= cutoff for d in sub_dates))
+
+        # A later cutoff (e.g. the second date) must drop only earlier dates.
+        unique_dates = sorted(set(dates))
+        later = unique_dates[1] if len(unique_dates) > 1 else unique_dates[0]
+        r = client.get(f"/api/fares/latest?from_date={later}", headers=self._auth(token))
+        self.assertEqual(r.status_code, 200, r.text)
+        sub_dates = {str(x["travel_date"]) for x in r.json()}
+        self.assertTrue(all(d >= later for d in sub_dates))
+        if len(unique_dates) > 1:
+            self.assertNotIn(unique_dates[0], sub_dates)
+
+    def test_fares_latest_rejects_bad_from_date(self):
+        token = self._login()["access_token"]
+        r = client.get("/api/fares/latest?from_date=not-a-date", headers=self._auth(token))
+        self.assertEqual(r.status_code, 400)
+
     # ---- sources (two-source monitor, replaces scrapers monitor) ----
 
     def test_sources_lists_the_two_real_sources(self):

@@ -59,6 +59,7 @@ def data_quality_summary(db: Session = Depends(get_db), _=Depends(require_permis
 @router.get("/fares/latest")
 def latest_fares(origin: str | None = None,
                  destination: str | None = None,
+                 from_date: str | None = None,
                  db: Session = Depends(get_db),
                  _=Depends(require_permission("view_dashboard"))):
     """Latest normalized fare per (route, airline, travel_date) — the
@@ -67,8 +68,19 @@ def latest_fares(origin: str | None = None,
     Uses VALID rows ordered by collection timestamp; returns the most
     recent snapshot so the UI can show 'as of' fares without duplicate
     historical rows.
+
+    ``from_date`` (YYYY-MM-DD) filters to travel dates on or after that
+    day, so charts like "Fares by Departure Date" can start at today.
     """
+    from datetime import date
     from sqlalchemy import func
+
+    if from_date:
+        try:
+            from_date_obj = date.fromisoformat(from_date)
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="from_date must be YYYY-MM-DD")
 
     valid_statuses = ("VALID",)
     base = (
@@ -87,16 +99,26 @@ def latest_fares(origin: str | None = None,
         base = base.filter(FareObservation.origin == origin)
     if destination:
         base = base.filter(FareObservation.destination == destination)
+    if from_date:
+        base = base.filter(FareObservation.travel_date >= from_date_obj)
 
     latest_snapshot = base.subquery()
-    rows = db.query(FareObservation).join(
-        latest_snapshot,
-        (FareObservation.origin == latest_snapshot.c.origin)
-        & (FareObservation.destination == latest_snapshot.c.destination)
-        & (FareObservation.airline == latest_snapshot.c.airline)
-        & (FareObservation.travel_date == latest_snapshot.c.travel_date)
-        & (FareObservation.collection_timestamp == latest_snapshot.c.latest_collected),
-    ).order_by(FareObservation.collection_timestamp.desc()).all()
+    rows = (
+        db.query(FareObservation)
+        .join(
+            latest_snapshot,
+            (FareObservation.origin == latest_snapshot.c.origin)
+            & (FareObservation.destination == latest_snapshot.c.destination)
+            & (FareObservation.airline == latest_snapshot.c.airline)
+            & (FareObservation.travel_date == latest_snapshot.c.travel_date)
+            & (FareObservation.collection_timestamp == latest_snapshot.c.latest_collected),
+        )
+        .order_by(
+            FareObservation.travel_date.asc(),
+            FareObservation.collection_timestamp.desc(),
+        )
+        .all()
+    )
 
     return [
         {
@@ -115,7 +137,7 @@ def latest_fares(origin: str | None = None,
             "collection_timestamp": r.collection_timestamp,
         }
         for r in rows
-    ][:500]
+    ]
 
 
 @router.get("/fares/routes")

@@ -17,9 +17,22 @@ const ROUTE_LABELS: Record<string, string> = {
 
 const BAR_COLORS = ['#1471e8', '#0ea5e9', '#6366f1', '#06b6d4', '#3b82f6', '#0284c7']
 
+// Calendar date (YYYY-MM-DD) of "today" in India (Asia/Kolkata). The fare feed
+// samples departure dates in IST, so the graph's window must start at today in
+// that timezone — and drift forward as the calendar does. No hardcoded dates.
+function todayInIST(): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return formatter.format(new Date())
+}
+
 export default function Dashboard() {
   const routes = useApiQuery<RouteFareSummary[]>('/fares/routes')
-  const latest = useApiQuery<LatestFare[]>('/fares/latest')
+  const latest = useApiQuery<LatestFare[]>(`/fares/latest?from_date=${todayInIST()}`)
   const current = useApiQuery<CpiAirfareIndex>('/cpi-airfare/current')
   const trend = useApiQuery<CpiAirfareTrend>('/cpi-airfare/trend?months=24')
   const chartRef = useRef<HTMLDivElement>(null)
@@ -43,10 +56,14 @@ export default function Dashboard() {
     : null
 
   // Group observations by departure date: show avg fare per date + count.
+  // Only dates on/after today (timezone-safe) are shown; the backend is asked
+  // for the same window via from_date, so no stale fares appear.
+  const todayStr = todayInIST()
   const byDateMap = new Map<string, { date: string; fares: number[]; routes: Set<string> }>()
   for (const f of latestRows) {
     if (f.total_fare === null) continue
     const key = f.travel_date
+    if (key < todayStr) continue
     if (!byDateMap.has(key)) byDateMap.set(key, { date: key, fares: [], routes: new Set() })
     const g = byDateMap.get(key)!
     g.fares.push(f.total_fare)
@@ -249,8 +266,8 @@ export default function Dashboard() {
         >
           <p className="pb-3 text-xs text-muted">
             {collectionDate
-              ? `Fares booked ${collectionDate} for flights leaving on these future dates — the earlier you book, the cheaper it usually is.`
-              : 'Each bar is the average fare for a flight departing on that date.'}
+              ? `Fares booked ${collectionDate} for flights departing from today onward — earlier bookings are usually cheaper.`
+              : 'Each bar is the average fare for a flight departing on or after today.'}
           </p>
           <div ref={chartRef2}>
             <ResponsiveContainer width="100%" height={300}>
