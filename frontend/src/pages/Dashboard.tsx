@@ -1,6 +1,6 @@
 import { Area, AreaChart, Bar, BarChart, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, Cell } from 'recharts'
 import { Plane, TrendingUp, CalendarDays, MapPin } from 'lucide-react'
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useApiQuery } from '../hooks/useApiQuery'
 import { PageHeader, StatCard, Card, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { exportChartAsPNG, downloadCSV } from '../utils/exportChart'
@@ -52,9 +52,14 @@ export default function Dashboard() {
   const routeRows = routes.data ?? []
   const latestRows = latest.data ?? []
   const withFares = routeRows.filter((r) => r.n_valid > 0 && r.avg_fare !== null)
-  const avgFare = withFares.length
-    ? withFares.reduce((s, r) => s + (r.avg_fare ?? 0), 0) / withFares.length
-    : null
+  // Overall average weighted by each route's observation count, so the headline
+  // equals the true mean across all captured fares — not an unweighted mean of
+  // per-route means (which over-weights thin routes).
+  const totalValid = withFares.reduce((s, r) => s + r.n_valid, 0)
+  const avgFare =
+    totalValid > 0
+      ? withFares.reduce((s, r) => s + (r.avg_fare ?? 0) * r.n_valid, 0) / totalValid
+      : null
   const minValues = withFares.map((r) => r.min_fare).filter((v): v is number => v !== null)
   const maxValues = withFares.map((r) => r.max_fare).filter((v): v is number => v !== null)
   const minFare = minValues.length ? Math.min(...minValues) : null
@@ -68,20 +73,34 @@ export default function Dashboard() {
         .reverse()[0]
     : null
 
-  // Group the latest snapshot by departure date. Only dates on/after today
-  // (timezone-safe) are kept, matching the from_date window requested above.
-  // Each point records how many fares and how many distinct routes it averages
-  // so the chart is never read as a single-route comparison.
+  // Group the latest (future) snapshot two ways: overall by departure date and
+  // per route — so dates can be compared like-for-like instead of averaging
+  // different markets into one bar (or worse, labeling it with one route).
+  const [selectedRoute, setSelectedRoute] = useState<string>('ALL')
   const byDateMap = new Map<string, { fares: number[]; routes: Set<string> }>()
+  const byRouteDateMap = new Map<string, Map<string, number[]>>()
   for (const f of latestRows) {
     if (f.total_fare === null) continue
     const key = f.travel_date
     if (key < todayStr) continue
+    const route = `${f.origin}-${f.destination}`
+
     if (!byDateMap.has(key)) byDateMap.set(key, { fares: [], routes: new Set() })
     const g = byDateMap.get(key)!
     g.fares.push(f.total_fare)
-    g.routes.add(`${f.origin}-${f.destination}`)
+    g.routes.add(route)
+
+    if (!byRouteDateMap.has(route)) byRouteDateMap.set(route, new Map())
+    const rm = byRouteDateMap.get(route)!
+    if (!rm.has(key)) rm.set(key, [])
+    rm.get(key)!.push(f.total_fare)
   }
+
+  const routeOptions = Array.from(byRouteDateMap.keys()).sort()
+  const routeLabelOf = (route: string) => ROUTE_LABELS[route] ?? route
+  // Fall back to the aggregate view if the chosen route has no future data.
+  const activeRoute = selectedRoute !== 'ALL' && byRouteDateMap.has(selectedRoute) ? selectedRoute : 'ALL'
+
   const fareByDate = Array.from(byDateMap.entries())
     .map(([date, g]) => ({
       date,
@@ -92,9 +111,22 @@ export default function Dashboard() {
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
 
+  const chartData =
+    activeRoute === 'ALL'
+      ? fareByDate
+      : Array.from((byRouteDateMap.get(activeRoute) ?? new Map<string, number[]>()).entries())
+          .map(([date, fares]) => ({
+            date,
+            label: formatDepartureLabel(date, todayStr),
+            avg_fare: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+            n: fares.length,
+            n_routes: 1,
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+
   // Cap the number of visible x-axis labels so a long departure calendar does
   // not collapse into overlapping text.
-  const dateTickInterval = Math.max(0, Math.ceil(fareByDate.length / 10) - 1)
+  const dateTickInterval = Math.max(0, Math.ceil(chartData.length / 10) - 1)
 
   const buildRoute = withFares
     .map((r) => ({
@@ -175,8 +207,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Routes Tracked"
-          value={withFares.length}
-          sub="Domestic sectors from Google Flights"
+          value={`${withFares.length} of ${routeRows.length}`}
+          sub="Basket routes with captured fares"
           icon={<MapPin size={18} />}
           accent
         />
@@ -251,11 +283,22 @@ export default function Dashboard() {
       )}
 
       {/* Secondary chart: average fare by upcoming departure date */}
-      {fareByDate.length > 0 && (
+      {chartData.length > 0 && (
         <Card
           title="Fares by Departure Date"
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={activeRoute}
+                onChange={(e) => setSelectedRoute(e.target.value)}
+                aria-label="Filter chart by route"
+                className="rounded-lg border border-line bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:border-brand-500/40 focus:border-brand-500/40 focus:outline-none"
+              >
+                <option value="ALL">All routes (average)</option>
+                {routeOptions.map((route) => (
+                  <option key={route} value={route}>{routeLabelOf(route)}</option>
+                ))}
+              </select>
               <span className="text-[11px] text-muted">upcoming departures · avg fare</span>
               <button
                 onClick={() => chartRef2.current && exportChartAsPNG(chartRef2.current, 'fares-by-departure.png')}
@@ -268,8 +311,12 @@ export default function Dashboard() {
                 onClick={() =>
                   downloadCSV(
                     'fares-by-departure.csv',
-                    ['Departure date', 'Avg fare (INR)', '# fares', '# routes'],
-                    fareByDate.map((p) => [p.date, p.avg_fare, p.n, p.n_routes])
+                    activeRoute === 'ALL'
+                      ? ['Departure date', 'Route', 'Avg fare (INR)', '# fares']
+                      : ['Departure date', 'Avg fare (INR)', '# fares'],
+                    activeRoute === 'ALL'
+                      ? chartData.map((p) => [p.date, 'All routes', p.avg_fare, p.n])
+                      : chartData.map((p) => [p.date, p.avg_fare, p.n])
                   )
                 }
                 title="Download as CSV"
@@ -281,14 +328,16 @@ export default function Dashboard() {
           }
         >
           <p className="pb-3 text-xs text-muted">
-            Average one-way fare for every departure date from today onward, across the tracked routes.
+            {activeRoute === 'ALL'
+              ? 'Average one-way fare for every departure date from today onward, across all tracked routes.'
+              : `Average one-way fare for ${routeLabelOf(activeRoute)} by departure date, from today onward.`}
             {collectionDate
               ? ` Latest fares were collected ${collectionDate}; later departures are usually cheaper to book now.`
               : ''}
           </p>
           <div ref={chartRef2}>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={fareByDate} margin={{ top: 8, right: 12, bottom: 56, left: 0 }}>
+              <BarChart data={chartData} margin={{ top: 8, right: 12, bottom: 56, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -306,9 +355,10 @@ export default function Dashboard() {
                   labelStyle={{ color: '#0f172a', fontWeight: 600 }}
                   labelFormatter={(label) => `Departure ${label}`}
                   formatter={(value: number, _name, item) => {
-                    const point = (item as { payload?: (typeof fareByDate)[number] } | undefined)?.payload
-                    const detail = point ? ` · ${point.n} fares · ${point.n_routes} routes` : ''
-                    return [`₹${value.toLocaleString()}${detail}`, 'Average']
+                    const point = (item as { payload?: (typeof chartData)[number] } | undefined)?.payload
+                    const fares = point ? `${point.n} fares` : ''
+                    const routes = point && point.n_routes > 1 ? ` · ${point.n_routes} routes` : ''
+                    return [`₹${value.toLocaleString()} · ${fares}${routes}`, 'Average']
                   }}
                 />
                 <Legend />
