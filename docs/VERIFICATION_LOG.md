@@ -564,3 +564,73 @@ FAILED (errors=1)   # test_api_integration: Postgres not running locally
 - Layout role-gates Admin via JWT payload decode
 - No modal dialogs for primary workflows
 - Color palette: slate bg, white cards, blue accent, red up, green down, amber warnings
+
+---
+
+## Dashboard "Fares by Departure Date" correctness fixes — 2026-09-17/18
+
+Three follow-up commits (`163d677`, `c50250d`, `d1fd6b5`) fix a data-accuracy
+bug plus chart/reading issues on the Dashboard's departure-date chart. All
+three are covered by `ci` + `compose-verify` runs (green).
+
+1. **`/api/fares/latest` truncation (real data loss).** The endpoint ordered
+   latest snapshots by `collection_timestamp DESC` and kept only `[:500]`.
+   Once daily live runs pushed total rows past 500, the earliest-collected
+   (hence earliest-`travel_date`) rows were silently dropped, so the chart's
+   start date drifted forward — the root cause of "why does the deployed graph
+   start at 2026-10-10 when today is 2026-09-17". Fixed: results ordered by
+   `travel_date ASC`, the `[:500]` cap removed, and a validated
+   `from_date=YYYY-MM-DD` query parameter added (400 on bad input). New tests:
+   `test_fares_latest_filters_dates_and_orders_ascending`,
+   `test_fares_latest_rejects_bad_from_date`.
+
+2. **Dynamic "from today" window.** `Dashboard.tsx` now computes today in
+   `Asia/Kolkata` (`Intl.DateTimeFormat`, no hardcoded dates), requests
+   `/fares/latest?from_date=<today>`, and defensively drops `travel_date <
+   today` client-side; the window advances with the calendar.
+
+3. **X-axis readability with many dates.** After the truncation fix returned
+   more departure dates, raw ISO ticks at `angle={-15}` + `interval={0}`
+   overlapped into a mess. Now compact "17 Sep" axis labels (manual parse so a
+   date-only string can't shift across timezones), `-45°`, a capped tick
+   interval (~10 labels max), `tickMargin`, and a taller axis.
+
+4. **Like-for-like aggregation.** The chart averaged all routes into one bar
+   yet labelled the row with only the first route's name (CSV/tooltip bug).
+   Added a route selector — "All routes (average)" or any single route with
+   future data — and each point reports `#fares` (plus `#routes` in the
+   aggregate view) in the tooltip and CSV. Unknown/empty route selection falls
+   back to the aggregate view.
+
+5. **Truthful headline numbers.** The hero card claimed "Current Fare Snapshot"
+   while its values were averages over ALL captured observations. Relabelled
+   "Average One-Way Fare" and now weighted by each route's `n_valid` count so
+   it equals the true mean over all captured fares (not an unweighted mean of
+   route means); min/max footnote corrected; "Routes Tracked" shows
+   "x of y basket routes with captured fares".
+
+Also along the way: null-safe min/max (no `Infinity`/`0` leaks), loading gate
+now waits on fares as well as the CPI, the departure chart renders with a
+single date, and unused `momPct`/`useMemoMom`/`TrendPill` dead code removed.
+
+6. **Bootstrap backfill for pre-populated databases.** A production Postgres
+   seeded before the real captures existed (or fed only by live runs) used to
+   skip the replay entirely (`_load_google_flights_replay` returned whenever
+   `fare_observations` was non-empty), so canonical replay departure dates
+   could be permanently missing — the old deployed chart could not show
+   2026-09-17 even though the real data ships in the repo. The loader now
+   backfills only the missing `(origin, destination, airline, travel_date)`
+   keys: additive (existing rows never overwritten or duplicated), idempotent
+   (a second run inserts nothing), and safe against the `observation_id`
+   unique constraint via an id + key guard scoped to VALID/SUSPICIOUS rows
+   (a key holding only INVALID rows is still backfilled with the real fare).
+   New test: `test_bootstrap_replay_backfills_missing_departure_dates`
+   (delete the 2026-09-17 rows → re-run loader → rows restored exactly, no
+   duplicates, second run is a no-op).
+
+**Verification:** backend suite 90/90; `tsc --noEmit` clean; `vite build` OK;
+`ci` (backend + alembic drift, frontend typecheck/build, Chromium e2e) green;
+`compose-verify` green; deployed backend `/api/health` returns 200. The chart
+data was validated end-to-end on a fresh DB: window starts at today (IST) and
+walks `2026-09-17 → 2026-10-31` with the real replayed fares (avg ₹7,245 /
+6,810 / 7,200 / 8,055 / 7,380); no dates or fares are synthesized.

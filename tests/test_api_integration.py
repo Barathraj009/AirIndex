@@ -33,6 +33,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core.database import engine, SessionLocal  # noqa: E402
 from app.models import Base  # noqa: E402
+from app.models.observations import FareObservation  # noqa: E402
 from app.models.cpi import CpiAirfareIndex  # noqa: E402
 from app.models.backtesting import ReferenceDataPoint  # noqa: E402
 from app.main import app  # noqa: E402
@@ -285,6 +286,38 @@ class APIIntegrationTests(unittest.TestCase):
         token = self._login()["access_token"]
         r = client.get("/api/fares/latest?from_date=not-a-date", headers=self._auth(token))
         self.assertEqual(r.status_code, 400)
+
+    def test_bootstrap_replay_backfills_missing_departure_dates(self):
+        """Deleting replay rows for a departure date must be healed by a
+        re-run of _load_google_flights_replay (additive only, idempotent)."""
+        from datetime import date
+
+        from scripts.bootstrap_reference import _load_google_flights_replay
+
+        db = SessionLocal()
+        try:
+            target = date(2026, 9, 17)
+            gone = db.query(FareObservation).filter(FareObservation.travel_date == target).all()
+            self.assertGreater(len(gone), 0, "expected replay rows to exist for the target date")
+            target_keys = {(g.origin, g.destination, g.airline) for g in gone}
+            for g in gone:
+                db.delete(g)
+            db.commit()
+            self.assertEqual(
+                db.query(FareObservation).filter(FareObservation.travel_date == target).count(), 0
+            )
+
+            _load_google_flights_replay(db)
+
+            healed = db.query(FareObservation).filter(FareObservation.travel_date == target).all()
+            self.assertEqual(len(healed), len(gone))
+            self.assertEqual({(h.origin, h.destination, h.airline) for h in healed}, target_keys)
+
+            total = db.query(FareObservation).count()
+            _load_google_flights_replay(db)  # must be a no-op second run
+            self.assertEqual(db.query(FareObservation).count(), total)
+        finally:
+            db.close()
 
     # ---- sources (two-source monitor, replaces scrapers monitor) ----
 

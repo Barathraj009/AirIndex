@@ -10,7 +10,10 @@ table is populated at server startup by the lifespan hook in main.py
 If the observation/reference tables are empty, the bundled Google Flights
 and MoSPI captures (real, provenance-labelled records from the
 licensed Google Flights feed and api.mospi.gov.in) are loaded so that the
-deployed app always renders real values — no external key required.
+deployed app always renders real values — no external key required. On a
+pre-populated database, any missing Google Flights replay departure dates
+are backfilled — additive only, never overwriting or duplicating existing
+rows.
 
 Usage:
     PYTHONPATH=./backend python scripts/bootstrap_reference.py
@@ -179,49 +182,86 @@ def _reconcile_config_base_period(db) -> None:
 
 
 def _load_google_flights_replay(db):
-        """Load the bundled Google Flights captures if none observed yet, so
-        the dashboard always renders real fare values (no API key required
-        on first boot)."""
-        if db.query(FareObservation).count() > 0:
-            print(f"fare_observations already populated ({db.query(FareObservation).count()} rows); keeping existing data.")
-            return
+    """Load the bundled real Google Flights captures.
 
-        import pandas as pd
+    Fresh DB (no observations yet): load every replay capture so the
+    dashboard renders real fares with no external key.
 
-        from app.services.data_processing import run_pipeline
+    Pre-populated DB (older database seeded before the real captures
+    existed, or one fed only by live runs): backfill just the
+    (origin, destination, airline, travel_date) keys that are missing, so
+    the real replay departure dates are never absent — and existing rows
+    are never overwritten or duplicated. Idempotent: a second run adds
+    nothing.
+    """
+    import pandas as pd
 
-        raw = pd.DataFrame(google_flights_replay())
-        for col in ("booking_window_days", "base_fare", "taxes_fees", "total_fare"):
-            if col in raw.columns:
-                raw[col] = pd.to_numeric(raw[col], errors="coerce")
-        clean_df, report = run_pipeline(raw, source="GOOGLE_FLIGHTS_API", source_type="LIVE_SCRAPE")
+    from app.services.data_processing import run_pipeline
 
-        if db.query(Airline).count() == 0:
-            known_iata = {"IndiGo": "6E", "Air India": "AI", "Air India Express": "IX",
-                          "Akasa Air": "QP", "SpiceJet": "SG", "Vistara": "UK"}
-            for name in sorted(clean_df["airline"].dropna().unique()):
-                db.add(Airline(name=name, iata_code=known_iata.get(name), active=True))
-            db.commit()
-            print(f"Seeded {db.query(Airline).count()} airlines from observed data.")
+    raw = pd.DataFrame(google_flights_replay())
+    for col in ("booking_window_days", "base_fare", "taxes_fees", "total_fare"):
+        if col in raw.columns:
+            raw[col] = pd.to_numeric(raw[col], errors="coerce")
+    clean_df, report = run_pipeline(raw, source="GOOGLE_FLIGHTS_API", source_type="LIVE_SCRAPE")
 
-        rows = clean_df.to_dict("records")
-        cleaned_rows = records_json_safe([
-            {k: r[k] for k in r if k in FareObservation.__table__.columns.keys()}
-            for r in rows
-        ])
-        coerced = []
-        for r in cleaned_rows:
-            r = dict(r)
-            td = r.get("travel_date")
-            if isinstance(td, str):
-                r["travel_date"] = date.fromisoformat(td[:10])
-            ts = r.get("collection_timestamp")
-            if isinstance(ts, str):
-                r["collection_timestamp"] = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            coerced.append(r)
-        db.bulk_insert_mappings(FareObservation, coerced)
+    quality = (FareObservation.data_quality_status.in_(("VALID", "SUSPICIOUS")))
+    existing = db.query(
+        FareObservation.observation_id,
+        FareObservation.origin,
+        FareObservation.destination,
+        FareObservation.airline,
+        FareObservation.travel_date,
+    ).filter(quality).all()
+    existing_ids = {row[0] for row in existing}
+    existing_keys = {(row[1], row[2], row[3], row[4]) for row in existing}
+
+    if db.query(Airline).count() == 0:
+        known_iata = {"IndiGo": "6E", "Air India": "AI", "Air India Express": "IX",
+                      "Akasa Air": "QP", "SpiceJet": "SG", "Vistara": "UK"}
+        for name in sorted(clean_df["airline"].dropna().unique()):
+            db.add(Airline(name=name, iata_code=known_iata.get(name), active=True))
         db.commit()
-        print(f"Seeded {len(rows)} Google Flights fare observations ({report.as_dict()}).")
+        print(f"Seeded {db.query(Airline).count()} airlines from observed data.")
+
+    rows = clean_df.to_dict("records")
+    missing = []
+    for r in rows:
+        if r.get("observation_id") in existing_ids:
+            continue
+        td = r.get("travel_date")
+        if isinstance(td, str):
+            td = date.fromisoformat(td[:10])
+        elif hasattr(td, "date"):
+            td = td.date()
+        key = (r.get("origin"), r.get("destination"), r.get("airline"), td)
+        if key in existing_keys:
+            continue
+        existing_ids.add(r.get("observation_id"))
+        existing_keys.add(key)
+        missing.append(r)
+
+    if not missing:
+        print(f"fare_observations already populated ({len(existing_keys)} route/airline/date keys); replay needs no backfill.")
+        return
+
+    cleaned_rows = records_json_safe([
+        {k: r[k] for k in r if k in FareObservation.__table__.columns.keys()}
+        for r in missing
+    ])
+    coerced = []
+    for r in cleaned_rows:
+        r = dict(r)
+        td = r.get("travel_date")
+        if isinstance(td, str):
+            r["travel_date"] = date.fromisoformat(td[:10])
+        ts = r.get("collection_timestamp")
+        if isinstance(ts, str):
+            r["collection_timestamp"] = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        coerced.append(r)
+    db.bulk_insert_mappings(FareObservation, coerced)
+    db.commit()
+    print(f"Backfilled {len(missing)} missing Google Flights fare observations "
+          f"(total now {db.query(FareObservation).count()}; {report.as_dict()}).")
 
 
 def _load_mospi_cpi_replay(db):
