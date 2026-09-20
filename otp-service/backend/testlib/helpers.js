@@ -21,10 +21,10 @@ async function stopServer() {
   server = null;
 }
 
-async function post(baseUrl, path, body) {
+async function post(baseUrl, path, body, headers = {}) {
   const res = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body || {}),
   });
   const json = await res.json().catch(() => ({}));

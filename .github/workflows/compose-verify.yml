@@ -13,6 +13,7 @@ on:
       - "backend/**"
       - "frontend/**"
       - "scripts/**"
+      - "otp-service/**"
 
 jobs:
   compose-up:
@@ -41,6 +42,24 @@ jobs:
           echo "backend never became healthy"
           docker compose -f deployment/docker-compose.yml ps || true
           exit 1
+
+      - name: Wait for OTP service health + CSRF gate
+        run: |
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/api/health || true)
+            if [ "$code" = "200" ]; then echo "otp healthy after ${i}x3s"; break; fi
+            sleep 3
+          done
+          curl -sf http://127.0.0.1:4000/api/health > /dev/null || { echo "otp never became healthy"; docker compose -f deployment/docker-compose.yml ps || true; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            http://127.0.0.1:4000/api/auth/send-otp \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"user@gmail.com"}' || true)
+          if [ "$code" != "403" ]; then
+            echo "expected CSRF gate to return 403, got $code"
+            exit 1
+          fi
+          echo "otp csrf gate OK (403 without token)"
 
       - name: Smoke API (login -> me -> CPI airfare index)
         run: |

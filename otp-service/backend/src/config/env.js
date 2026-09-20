@@ -89,8 +89,21 @@ const config = {
   },
 
   jwt: {
-    secret: required('JWT_SECRET', isProd ? undefined : 'dev-only-jwt-secret-change-me'),
+    // OTP_SERVICE_JWT_SECRET is the shared name the AirIndex host uses; both
+    // names are honored so a deployment can use a single secret value across
+    // the OTP service and the FastAPI backend /api/auth endpoints.
+    secret:
+      process.env.OTP_SERVICE_JWT_SECRET ||
+      required('JWT_SECRET', isProd ? undefined : 'dev-only-jwt-secret-change-me'),
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+  },
+
+  csrf: {
+    // Double-submit cookie protection for the public state-changing
+    // endpoints (send/verify/resend OTP, logout). On by default in
+    // production; disable only for trusted same-origin/internal hosts.
+    enabled: bool(process.env.CSRF_ENABLED, isProd),
+    cookieName: process.env.CSRF_COOKIE_NAME || 'csrf_token',
   },
 
   cookie: {

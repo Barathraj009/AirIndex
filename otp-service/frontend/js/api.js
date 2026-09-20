@@ -8,6 +8,32 @@ const OtpAuthApi = (function () {
     return (window.OtpAuthConfig && window.OtpAuthConfig.apiBaseUrl) || '/api/auth';
   }
 
+  // Bootstraps the double-submit CSRF token once per page load. Returns the
+  // token from the /csrf JSON body (works same-origin and cross-origin with
+  // CORS). The server also sets a matching cookie; enforcement compares the
+  // header to that cookie in constant time. If /csrf is unavailable (e.g. a
+  // host that didn't mount it) every state-changing call simply continues
+  // without the header — the module server ignores it when CSRF is off.
+  let csrfTokenPromise = null;
+  function getCsrfToken() {
+    if (!csrfTokenPromise) {
+      csrfTokenPromise = (async () => {
+        try {
+          const response = await fetch(`${baseUrl()}/csrf`, {
+            method: 'GET',
+            credentials: 'include',
+          });
+          if (!response.ok) return '';
+          const data = await response.json().catch(() => ({}));
+          return (data && data.csrfToken) || '';
+        } catch (e) {
+          return '';
+        }
+      })();
+    }
+    return csrfTokenPromise;
+  }
+
   async function request(path, body) {
     return doFetch(path, body ? { method: 'POST', body } : {});
   }
@@ -15,9 +41,14 @@ const OtpAuthApi = (function () {
   async function doFetch(path, { method = 'POST', body } = {}) {
     let response;
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (method === 'POST') {
+        const csrfToken = await getCsrfToken().catch(() => '');
+        if (csrfToken) headers['x-csrf-token'] = csrfToken;
+      }
       const init = {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
       };
       if (body) init.body = JSON.stringify(body);

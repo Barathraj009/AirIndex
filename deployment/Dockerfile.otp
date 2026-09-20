@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Resolves the full dependency tree from the commit-locked lockfile; the
+# OTP service's deps are all pure JavaScript (no native builds required).
+COPY otp-service/backend/package.json otp-service/backend/package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY otp-service/backend ./
+
+ENV NODE_ENV=production
+ENV PORT=4000
+EXPOSE 4000
+
+# server.js boots the standalone OTP auth microservice (createApp +
+# demo frontend on :4000 / :HEALTH).
+CMD ["node", "server.js"]

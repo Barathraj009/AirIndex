@@ -207,6 +207,23 @@ frontend, and a free Postgres database. Blueprint deploy:
 | `INGESTION_SCHEDULE_CRON` | `0 6 * * *` daily (default) — ≈180 Google Flights requests/month on 6 routes |
 | `FX_RATE_USD_INR` | 90.0 default; USD→INR reference rate for the feed |
 
+The Blueprint also provisions **`airindex-otp`**, the Email-OTP auth
+microservice (`otp-service/`), as its own free Node web service at
+`https://airindex-otp.onrender.com` (health `/api/health`, CSRF-gated
+`/api/auth/*`). Paste these secrets on its first deploy:
+
+| Var (airindex-otp) | Notes |
+|---|---|
+| `OTP_SERVICE_JWT_SECRET` | MUST equal the backend's `OTP_SERVICE_JWT_SECRET` (the backend verifies this service's hand-off JWTs with it) |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Gmail App Password (not your real password) for OTP delivery |
+| `OTP_HASH_SECRET` | long random string (`openssl rand -hex 32`) |
+
+Status note: the OTP **service is deployed and sized** by this config, but
+the React app's login page is not yet wired to it — `src/pages/Login.tsx`
+is plain email/password today (the dev-only `/otp-auth/` proxy in
+`vite.config.ts` is the only hook). Wiring the Email-OTP tab into the
+login UI is a separate, pending frontend task.
+
 The backend image waits for Postgres, `create_all`s the schema, runs
 `bootstrap_reference.py` (route basket, the two data sources
 `MOSPI_CPI` + `GOOGLE_FLIGHTS_API`, admin user, active index config —

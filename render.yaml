@@ -47,6 +47,39 @@ services:
         source: /*
         destination: /index.html
 
+  # Email-OTP auth microservice (otp-service). Serves /api/auth/send-otp,
+  # /verify-otp, /logout, /csrf; issues the hand-off JWT that the backend
+  # verifies in /api/auth/register-with-otp.
+  - type: web
+    name: airindex-otp
+    runtime: node
+    rootDir: otp-service/backend
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: CORS_ORIGIN
+        value: https://airindex-frontend.onrender.com
+      - key: CSRF_ENABLED
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: lax
+      # MUST be identical to the backend's OTP_SERVICE_JWT_SECRET — the
+      # backend verifies this service's hand-off JWTs with the same value.
+      - key: OTP_SERVICE_JWT_SECRET
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: OTP_HASH_SECRET
+        sync: false
+
 databases:
   - name: airindex-db
     plan: free

@@ -91,6 +91,17 @@ For strictly public state-changing endpoints, add explicit CSRF token
 validation (a `fetch`-set cookie source + a `req` double-submit check or a
 CSRF middleware).
 
+**Status — addressed (2026-09-20).** Double-submit CSRF protection is now
+included: `GET /api/auth/csrf` issues a random `csrf_token` cookie (plus a
+body copy), and every state-changing `/api/auth` endpoint
+(`send-otp`, `resend-otp`, `verify-otp`, `logout`) requires the matching
+`x-csrf-token` header. Enforced in production by default
+(`CSRF_ENABLED=true`), constant-time comparison, safe methods exempt, and a
+dedicated test suite (`test/csrf.test.js`). The bundled demo frontend
+(`frontend/js/api.js`) bootstraps and sends the token automatically. For a
+same-origin internal deployment you may set `CSRF_ENABLED=false`; for
+public-facing endpoints keep it on.
+
 ## 8. Configuration that's already handled — just needs your real values
 
 - Real Gmail App Password + `OTP_HASH_SECRET` / `JWT_SECRET`
@@ -120,6 +131,10 @@ using `createApp()` over HTTP and an offline `json` email transport:
   relayed back verbatim
 - Security: OTPs never returned/logged; session cookie is httpOnly + aligned
   Max-Age; redacting logger; constant-time hash verification
+- CSRF: `GET /api/auth/csrf` issues a token cookie + body value; state-changing
+  endpoints return 403 without a matching `x-csrf-token` header (mismatch and
+  missing-token both rejected); safe methods stay open; matched token reaches
+  `send-otp`
 
 **Not exercised here:** a real Gmail SMTP send (offline `json` transport is
 used in CI) and a browser click-through. Both are standard paths — do one

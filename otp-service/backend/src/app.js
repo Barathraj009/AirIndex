@@ -18,6 +18,7 @@ const morgan = require('morgan');
 const config = require('./config/env');
 const authRoutes = require('./routes/authRoutes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { csrfEnforcer } = require('./middleware/csrf');
 const logger = require('./utils/logger');
 
 /**
@@ -51,6 +52,9 @@ function createApp(options = {}) {
   });
 
   // ---- Auth module routes (the reusable part) ----
+  // CSRF double-submit protection protects the public state-changing
+  // endpoints; GET /api/auth/csrf (safe) is exempt and issues the token.
+  app.use('/api/auth', csrfEnforcer());
   app.use('/api/auth', authRoutes);
 
   // ---- Demo mode: serve the standalone frontend so this module can be

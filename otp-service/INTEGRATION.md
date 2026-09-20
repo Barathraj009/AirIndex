@@ -156,12 +156,28 @@ DOM node.
 
 ---
 
-## 3. CORS and the session cookie
+## 3. CSRF and the session cookie
 
-- Different origins? Set `CORS_ORIGIN` to your frontend origin(s),
-  comma-separated.
+- **CSRF (on by default in production).** Every state-changing `/api/auth`
+  endpoint requires a double-submit token:
+  1. `GET /api/auth/csrf` → the server sets a `csrf_token` cookie and returns
+     the same value as `{ csrfToken }` in the JSON body.
+  2. Send that value back on `send-otp` / `resend-otp` / `verify-otp` /
+     `logout` as the `x-csrf-token` header (alongside the cookie, which the
+     browser sends automatically for same-site requests).
+  - A request missing the header, or with a header that does not match the
+    cookie, gets `403 { error: "csrf_failed" }`. Safe methods (GET/HEAD/
+    OPTIONS) are exempt.
+  - The bundled `frontend/js/api.js` handles all of this automatically (it
+    fetches the token once per page load). Any other client must do the
+    same. For trusted same-origin/internal hosts you can set
+    `CSRF_ENABLED=false`; for public-facing endpoints keep it on.
+- **CORS.** Different origins? Set `CORS_ORIGIN` to your frontend
+  origin(s), comma-separated.
 - Cross-origin cookie delivery requires `COOKIE_SAMESITE=none` **and**
-  HTTPS (the cookie is marked `Secure` in production).
+  HTTPS (the cookie is marked `Secure` in production). Prefixes like
+  `airindex-frontend.onrender.com` → `airindex-otp.onrender.com` are the
+  same site (`onrender.com`), so the default `SameSite=Lax` works there.
 - Same-origin (or same-site) setups work with the default `SameSite=Lax`.
 
 ## 4. Disabling the built-in demo dashboard

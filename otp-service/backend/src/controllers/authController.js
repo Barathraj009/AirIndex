@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const config = require('../config/env');
 const otpService = require('../services/otpService');
 const { issueSessionToken, decodeSessionToken } = require('../services/sessionService');
@@ -199,6 +200,23 @@ const logout = asyncHandler(async (req, res) => {
   return res.status(200).json({ success: true, message: 'Logged out.' });
 });
 
+// Issues the double-submit CSRF token. Always runs (disabled middleware
+// ignores it) so clients can unconditionally bootstrap the token; when
+// enforcement is on, both the cookie and the returned body value must be
+// sent back on state-changing calls. The cookie is intentionally NOT
+// httpOnly so the owning client can read it for the double-submit check.
+const csrf = (req, res) => {
+  const token = crypto.randomBytes(32).toString('hex');
+  res.cookie(config.csrf.cookieName, token, {
+    httpOnly: false,
+    secure: config.isProd,
+    sameSite: config.cookie.sameSite,
+    path: '/',
+    maxAge: 6 * 60 * 60 * 1000, // 6h — refreshed on each page load
+  });
+  return res.status(200).json({ success: true, csrfToken: token });
+};
+
 const session = asyncHandler(async (req, res) => {
   // Protected by middleware/auth.js#requireSession. req.auth is the
   // verified JWT payload, which includes iat (issued-at) and exp (expiry)
@@ -214,4 +232,4 @@ const session = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { sendOtp, resendOtp, verifyOtp, logout, session };
+module.exports = { sendOtp, resendOtp, verifyOtp, logout, session, csrf };

@@ -21,6 +21,11 @@ router.post('/resend-otp', sendOtpLimiter, validateEmail, authController.resendO
 router.post('/verify-otp', verifyOtpLimiter, validateEmail, authController.verifyOtp);
 router.post('/logout', authController.logout);
 
+// Issues the double-submit CSRF token (cookie + body). Safe method, so it
+// passes the csrfEnforcer; clients must send the value back as
+// `x-csrf-token` on every state-changing call below when CSRF is enabled.
+router.get('/csrf', authController.csrf);
+
 // Integration-layer endpoints: any host app (or this demo) can call these
 // with the session token to confirm "who is currently authenticated".
 // `/session` and `/me` are aliases.

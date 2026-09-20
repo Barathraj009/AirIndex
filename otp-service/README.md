@@ -3,7 +3,8 @@
 The **AirIndex India** login module. A standalone email one-time-password
 authentication microservice (port 4000) used by the AirIndex India
 Real-time Airfare Price Index web app. It exposes `/api/auth/send-otp`,
-`/api/auth/verify-otp`, and `/api/auth/logout`, and returns a JWT that
+`/api/auth/verify-otp`, `/api/auth/logout`, and the CSRF bootstrap
+`/api/auth/csrf`, and returns a JWT that
 AirIndex India's FastAPI backend exchanges via `POST /api/auth/otp/exchange`
 (find-or-create user, issue standard AirIndex tokens).
 
